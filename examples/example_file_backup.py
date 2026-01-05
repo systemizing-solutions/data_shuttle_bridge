@@ -47,7 +47,7 @@ def main():
             f.write("Nested document\n" * 75)
 
         print("=" * 60)
-        print("FRL BACKUP EXAMPLE")
+        print("File BACKUP EXAMPLE")
         print("=" * 60)
         print(f"\nSource directory: {source_dir}")
         print(f"Repository URL: {repo_url}\n")
@@ -94,7 +94,7 @@ def main():
             print(f"    [OK] subdir/nested.txt: restored successfully")
 
         print("\n" + "=" * 60)
-        print("Example complete! Check FRL_README.md for more details.")
+        print("Example complete! Check README.md for more details.")
         print("=" * 60)
 
 

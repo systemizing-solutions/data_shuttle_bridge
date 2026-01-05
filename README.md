@@ -1,6 +1,6 @@
 # data_shuttle_bridge
 
-A comprehensive data synchronization and backup solution featuring:
+A comprehensive data synchronization and backup solution:
 - **DATA:** What you are moving
 - **S.H.U.T.T.L.E** - **S**ync **H**ub **U**tility, **T**ransfers & **T**wo-way **L**inked **E**ndpoints
 - **B.R.I.D.G.E** - **B**atch **R**eplication & **I**ncremental **D**elta **G**ateway **E**ngine
