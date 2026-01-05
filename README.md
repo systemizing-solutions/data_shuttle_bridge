@@ -22,7 +22,9 @@ Local-first, bidirectional sync engine for **SQLAlchemy** and **SQLModel** with:
 ### File Backup
 Lightweight backup tool with multi-backend support:
 
-- **Multi-backend storage** - Local, S3, GCS, Azure, HTTP, and 25+ more via fsspec
+- **Multi-backend storage** - Local, S3, GCS, Azure, HTTP, and 25+ more via `fsspec`:
+    - Implementations built into fsspec: [Built-in Implementations](https://filesystem-spec.readthedocs.io/en/latest/api.html#implementations)
+    - Implementations in separate packages: [Other Known Implementations](https://filesystem-spec.readthedocs.io/en/latest/api.html#external-implementations)
 - **Content deduplication** - SHA256-based content addressing automatically deduplicates identical files
 - **Snapshot-based recovery** - Point-in-time recovery with full file metadata preservation
 - **Automatic deduplication** - Identical content shared across snapshots
@@ -54,7 +56,7 @@ src/data_shuttle_bridge/
 tests/
 ├── test_sql_sync.py              # SQL sync tests
 ├── test_file_backup.py           # File backup tests
-└── ...
+└── __init__.py
 
 examples/
 ├── sqlalchemy/                   # SQLAlchemy examples

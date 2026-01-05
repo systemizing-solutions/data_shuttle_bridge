@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, SQLModel, Column as SQLModelColumn
@@ -21,6 +21,11 @@ def _get_next_id():
     return get_id_generator()()
 
 
+def _get_utc_now():
+    """Get current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
+
+
 class SyncRowSQLModelMixin(SQLModel):
     id: int = Field(
         default_factory=_get_next_id,
@@ -29,7 +34,7 @@ class SyncRowSQLModelMixin(SQLModel):
     )
 
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,  # Python-side default
+        default_factory=_get_utc_now,  # Python-side default (timezone-aware)
         sa_type=DateTime(timezone=True),
         sa_column_kwargs={
             "nullable": False,
