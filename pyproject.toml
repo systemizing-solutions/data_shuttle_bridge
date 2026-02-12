@@ -26,6 +26,9 @@ sqlmodel = "^0.0.31"
 sqlalchemy = "^2.0.45"
 watchdog = "^6.0.0"
 fsspec = "^2024.2.0"
+cryptography = "^42.0.0"
+itsdangerous = "^2.1.2"
+requests = "^2.31.0"
 
 # Include optional dependencies
 Flask = { version = "^3.0.3", optional = true }

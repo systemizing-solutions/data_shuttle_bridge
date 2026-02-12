@@ -1,0 +1,280 @@
+{
+    "comment": "Sync Configuration Examples in JSON format",
+    "note": "See sync_config_examples.yaml for detailed documentation and use cases",
+    "example_1_entire_database": {
+        "scope": "database",
+        "enabled": true
+    },
+    "example_2_specific_schemas": {
+        "scope": "schema",
+        "enabled": true,
+        "schemas": [
+            {
+                "name": "public",
+                "include_all_tables": true
+            },
+            {
+                "name": "private",
+                "include_all_tables": false,
+                "tables": {
+                    "users": true,
+                    "profiles": true
+                }
+            }
+        ]
+    },
+    "example_3_specific_tables": {
+        "scope": "tables",
+        "enabled": true,
+        "tables": {
+            "users": {
+                "enabled": true
+            },
+            "orders": {
+                "enabled": true
+            },
+            "payments": {
+                "enabled": true
+            },
+            "internal_logs": {
+                "enabled": false
+            }
+        }
+    },
+    "example_4_with_row_filters": {
+        "scope": "filtered",
+        "enabled": true,
+        "tables": {
+            "orders": {
+                "enabled": true,
+                "filter": {
+                    "conditions": [
+                        {
+                            "field": "status",
+                            "operator": "in",
+                            "value": [
+                                "completed",
+                                "shipped"
+                            ]
+                        }
+                    ],
+                    "logic": "AND"
+                }
+            },
+            "customers": {
+                "enabled": true,
+                "filter": {
+                    "conditions": [
+                        {
+                            "field": "is_active",
+                            "operator": "=",
+                            "value": true
+                        },
+                        {
+                            "field": "region",
+                            "operator": "=",
+                            "value": "US"
+                        }
+                    ],
+                    "logic": "AND"
+                }
+            }
+        }
+    },
+    "example_5_with_column_filtering": {
+        "scope": "tables",
+        "enabled": true,
+        "tables": {
+            "users": {
+                "enabled": true,
+                "exclude_columns": [
+                    "password_hash",
+                    "internal_notes",
+                    "api_token"
+                ]
+            },
+            "customers": {
+                "enabled": true,
+                "include_only_columns": [
+                    "id",
+                    "name",
+                    "email",
+                    "phone",
+                    "address"
+                ]
+            }
+        }
+    },
+    "example_6_tenant_specific": {
+        "scope": "filtered",
+        "enabled": true,
+        "tables": {
+            "users": {
+                "enabled": true,
+                "filter": {
+                    "conditions": [
+                        {
+                            "field": "tenant_id",
+                            "operator": "=",
+                            "value": "ACME-CORP-001"
+                        }
+                    ],
+                    "logic": "AND"
+                }
+            },
+            "projects": {
+                "enabled": true,
+                "filter": {
+                    "conditions": [
+                        {
+                            "field": "tenant_id",
+                            "operator": "=",
+                            "value": "ACME-CORP-001"
+                        }
+                    ],
+                    "logic": "AND"
+                }
+            },
+            "tasks": {
+                "enabled": true,
+                "filter": {
+                    "conditions": [
+                        {
+                            "field": "tenant_id",
+                            "operator": "=",
+                            "value": "ACME-CORP-001"
+                        }
+                    ],
+                    "logic": "AND"
+                }
+            }
+        }
+    },
+    "example_7_rule_based_filtering": {
+        "scope": "filtered",
+        "enabled": true,
+        "tables": {
+            "orders": {
+                "enabled": true,
+                "filter": {
+                    "conditions": [
+                        {
+                            "field": "customer_id",
+                            "operator": "=",
+                            "reference_table": "strategic_accounts",
+                            "reference_key": "customer_id"
+                        }
+                    ],
+                    "logic": "AND"
+                }
+            }
+        }
+    },
+    "example_8_time_based_filtering": {
+        "scope": "filtered",
+        "enabled": true,
+        "tables": {
+            "activities": {
+                "enabled": true,
+                "filter": {
+                    "conditions": [
+                        {
+                            "field": "created_at",
+                            "operator": ">",
+                            "value": "2024-01-13"
+                        }
+                    ],
+                    "logic": "AND"
+                }
+            },
+            "events": {
+                "enabled": true,
+                "filter": {
+                    "conditions": [
+                        {
+                            "field": "event_date",
+                            "operator": "<",
+                            "value": "2026-05-12"
+                        },
+                        {
+                            "field": "event_date",
+                            "operator": ">",
+                            "value": "2026-02-12"
+                        }
+                    ],
+                    "logic": "AND"
+                }
+            }
+        }
+    },
+    "example_9_complex_filtering": {
+        "scope": "filtered",
+        "enabled": true,
+        "tables": {
+            "transactions": {
+                "enabled": true,
+                "filter": {
+                    "conditions": [
+                        {
+                            "field": "status",
+                            "operator": "=",
+                            "value": "settled"
+                        },
+                        {
+                            "field": "amount_cents",
+                            "operator": ">",
+                            "value": 0
+                        }
+                    ],
+                    "logic": "AND",
+                    "nested": {
+                        "conditions": [
+                            {
+                                "field": "transaction_type",
+                                "operator": "in",
+                                "value": [
+                                    "purchase",
+                                    "refund",
+                                    "adjustment"
+                                ]
+                            },
+                            {
+                                "field": "is_test",
+                                "operator": "=",
+                                "value": false
+                            }
+                        ],
+                        "logic": "OR"
+                    }
+                }
+            }
+        }
+    },
+    "example_10_exclude_system_tables": {
+        "scope": "tables",
+        "enabled": true,
+        "tables": {
+            "users": {
+                "enabled": true
+            },
+            "orders": {
+                "enabled": true
+            },
+            "customers": {
+                "enabled": true
+            },
+            "products": {
+                "enabled": true
+            },
+            "audit_log": {
+                "enabled": false
+            },
+            "sync_state": {
+                "enabled": false
+            },
+            "change_log": {
+                "enabled": false
+            }
+        }
+    }
+}

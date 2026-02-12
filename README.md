@@ -19,6 +19,18 @@ Local-first, bidirectional sync engine for **SQLAlchemy** and **SQLModel** with:
 - **Write watermarking** with node tracking to prevent circular syncs
 - Tiny **CLI** (`localfirst-sync`) to register/ensure a device `node_id`
 
+### Schema Versioning & Consolidation
+Manage evolving schemas with automatic or explicit mapping rules:
+
+- **JSON Schema contract** - Define schemas using JSON Schema (2020-12 draft)
+- **Automatic versioning** - Each schema version gets a physical table (e.g., `customer__v1`, `customer__v2`)
+- **Drift detection** - Automatically compute and classify schema changes between versions
+- **Flexible mapping** - Support renames, type changes, expressions, and default behaviors
+- **Unified queries** - Build UNION ALL views across versions with automatic column alignment
+- **Auditable evolution** - All diffs, rules, and view definitions are stored in registry
+- **Policy engines** - Configurable default handling for missing/removed fields
+- See [SCHEMA_VERSIONING_README.md](./SCHEMA_VERSIONING_README.md) for detailed documentation and examples
+
 ### File Backup
 Lightweight backup tool with multi-backend support:
 
@@ -38,11 +50,19 @@ current_version = "v0.0.1"
 
 ```
 src/data_shuttle_bridge/
-├── sql/                          # Database synchronization
+├── sql/                          # Database synchronization and versioning
 │   ├── models.py                 # ORM models and mixins
 │   ├── sync.py                   # Sync engine
 │   ├── transport.py              # HTTP transport
 │   ├── blueprint.py              # Flask sync blueprint
+│   ├── versioning_models.py      # Schema versioning ORM models
+│   ├── schema_registry.py        # Schema registry runtime
+│   ├── jsonschema_types.py       # JSON Schema to SQLAlchemy mapping
+│   ├── diffing.py                # Schema diff engine
+│   ├── policy.py                 # Drift policy engines
+│   ├── mapping.py                # Mapping rules
+│   ├── view_builder.py           # Consolidation view builder
+│   ├── dialects/                 # Database dialect adapters
 │   └── ...
 ├── file_backup/                  # File backup
 │   ├── cli.py                    # CLI commands

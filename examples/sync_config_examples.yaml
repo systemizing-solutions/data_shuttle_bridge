@@ -1,0 +1,301 @@
+# Sync Configuration Examples
+#
+# This file demonstrates the various ways to configure what data gets synchronized
+# in the data_shuttle_bridge package.
+
+# ============================================================================
+# EXAMPLE 1: Sync the entire database (default behavior)
+# ============================================================================
+# Use this for simple cases where all tables in your database should be synced
+
+scope: database
+enabled: true
+
+---
+
+# ============================================================================
+# EXAMPLE 2: Sync specific schemas (for databases that support multiple schemas)
+# ============================================================================
+# Use this when you want to sync only certain schemas in your database
+
+scope: schema
+enabled: true
+
+schemas:
+  - name: public
+    include_all_tables: true
+    
+  - name: private  
+    include_all_tables: false
+    tables:
+      users: true
+      profiles: true
+      # other tables in 'private' schema won't be synced
+
+---
+
+# ============================================================================
+# EXAMPLE 3: Sync specific tables only
+# ============================================================================
+# Use this when you want fine-grained control over which tables are synced
+
+scope: tables
+enabled: true
+
+tables:
+  users:
+    enabled: true
+    
+  orders:
+    enabled: true
+    
+  payments:
+    enabled: true
+    
+  # products table won't be synced because it's not listed
+  # OR you can explicitly disable it:
+  internal_logs:
+    enabled: false
+
+---
+
+# ============================================================================
+# EXAMPLE 4: Sync tables with row-level filters
+# ============================================================================
+# Use this when you want to sync only certain rows from tables
+# (e.g., active records, tenant-specific data, etc.)
+
+scope: filtered
+enabled: true
+
+tables:
+  orders:
+    enabled: true
+    filter:
+      # Only sync orders with status "completed" or "shipped"
+      conditions:
+        - field: status
+          operator: in
+          value: [completed, shipped]
+      logic: AND
+  
+  customers:
+    enabled: true
+    filter:
+      # Only sync active customers from specific regions
+      conditions:
+        - field: is_active
+          operator: "="
+          value: true
+        - field: region
+          operator: "="
+          value: US
+      logic: AND
+  
+  invoices:
+    enabled: true
+    filter:
+      # Complex: synced if (high value AND recent) OR (flagged for export)
+      conditions:
+        - field: amount_cents
+          operator: ">"
+          value: 10000
+        - field: created_at
+          operator: ">"
+          value: "2024-01-01"
+      logic: AND
+      nested:
+        conditions:
+          - field: export_flag
+            operator: "="
+            value: true
+        logic: OR
+
+---
+
+# ============================================================================
+# EXAMPLE 5: Sync with column filtering
+# ============================================================================
+# Use this to exclude sensitive or unnecessary columns from syncing
+
+scope: tables
+enabled: true
+
+tables:
+  users:
+    enabled: true
+    exclude_columns:
+      - password_hash
+      - internal_notes
+      - api_token
+  
+  customers:
+    enabled: true
+    # Alternative: specify only columns to include
+    include_only_columns:
+      - id
+      - name
+      - email
+      - phone
+      - address
+
+---
+
+# ============================================================================
+# EXAMPLE 6: Tenant-specific configuration
+# ============================================================================
+# Use this for multi-tenant scenarios where each tenant syncs different subsets
+
+scope: filtered
+enabled: true
+
+tables:
+  users:
+    enabled: true
+    filter:
+      conditions:
+        # Only sync users for this tenant
+        - field: tenant_id
+          operator: "="
+          value: "ACME-CORP-001"
+      logic: AND
+  
+  projects:
+    enabled: true
+    filter:
+      conditions:
+        - field: tenant_id
+          operator: "="
+          value: "ACME-CORP-001"
+      logic: AND
+  
+  tasks:
+    enabled: true
+    filter:
+      conditions:
+        - field: tenant_id
+          operator: "="
+          value: "ACME-CORP-001"
+      logic: AND
+
+---
+
+# ============================================================================
+# EXAMPLE 7: Rule-based filtering with reference tables
+# ============================================================================
+# Use this when filter rules are stored in other tables
+# (advanced use case)
+
+scope: filtered
+enabled: true
+
+tables:
+  orders:
+    enabled: true
+    filter:
+      conditions:
+        # Sync orders where customer is in the "strategic_accounts" list
+        - field: customer_id
+          operator: "="
+          reference_table: strategic_accounts
+          reference_key: customer_id
+      logic: AND
+
+---
+
+# ============================================================================
+# EXAMPLE 8: Time-based filtering
+# ============================================================================
+# Use this to sync only recent or upcoming data
+
+scope: filtered
+enabled: true
+
+tables:
+  activities:
+    enabled: true
+    filter:
+      conditions:
+        # Only sync last 30 days of activities
+        - field: created_at
+          operator: ">"
+          value: "2024-01-13"  # 30 days before now
+      logic: AND
+  
+  events:
+    enabled: true
+    filter:
+      conditions:
+        # Only sync upcoming events (next 90 days)
+        - field: event_date
+          operator: "<"
+          value: "2026-05-12"  # 90 days from now
+        - field: event_date
+          operator: ">"
+          value: "2026-02-12"
+      logic: AND
+
+---
+
+# ============================================================================
+# EXAMPLE 9: Complex multi-condition filtering
+# ============================================================================
+# Combines multiple conditions with AND/OR logic
+
+scope: filtered
+enabled: true
+
+tables:
+  transactions:
+    enabled: true
+    filter:
+      conditions:
+        - field: status
+          operator: "="
+          value: settled
+        - field: amount_cents
+          operator: ">"
+          value: 0
+      logic: AND
+      nested:
+        conditions:
+          - field: transaction_type
+            operator: in
+            value: [purchase, refund, adjustment]
+          - field: is_test
+            operator: "="
+            value: false
+        logic: OR
+
+---
+
+# ============================================================================
+# EXAMPLE 10: Exclude internal/audit tables
+# ============================================================================
+# Standard configuration that syncs most tables but excludes system tables
+
+scope: tables
+enabled: true
+
+tables:
+  users:
+    enabled: true
+  
+  orders:
+    enabled: true
+  
+  customers:
+    enabled: true
+  
+  products:
+    enabled: true
+  
+  # System/audit tables - disabled
+  audit_log:
+    enabled: false
+  
+  sync_state:
+    enabled: false
+  
+  change_log:
+    enabled: false

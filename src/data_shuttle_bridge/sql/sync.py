@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from enum import Enum
-from typing import Dict, List, Iterable, Tuple, Set
+from typing import Dict, List, Iterable, Tuple, Set, Optional, Any
 
 from sqlmodel import Session, select
 
@@ -10,6 +10,8 @@ from data_shuttle_bridge.sql.changelog import ChangeLog, SyncState
 from data_shuttle_bridge.sql.payloads import TableSchema, apply_row, serialize_row
 from data_shuttle_bridge.sql.typing_ import ChangePayload
 from data_shuttle_bridge.sql.wiring import set_current_node_id, get_current_node_id
+from data_shuttle_bridge.sql.sync_config import SyncConfig, SyncScope
+from data_shuttle_bridge.sql.sync_filter import RowFilterEvaluator
 
 
 class ConflictPolicy(str, Enum):
@@ -26,12 +28,15 @@ class SyncEngine:
         policy: ConflictPolicy = ConflictPolicy.LWW,
         parent_first_order: Iterable[str] | None = None,
         node_id: str | None = None,
+        sync_config: Optional[SyncConfig] = None,
     ):
         self.sess = session
         self.peer_id = peer_id
         self.schema = schema
         self.policy = policy
         self.node_id = node_id
+        self.sync_config = sync_config or SyncConfig()  # Default: sync all
+        self.filter_evaluator = RowFilterEvaluator(session)
         self.order = (
             list(parent_first_order) if parent_first_order else self._compute_order()
         )
@@ -60,13 +65,87 @@ class SyncEngine:
             out.extend(remain)
         return out
 
+    def _should_sync_table(self, table_name: str) -> bool:
+        """Check if a table should be synced based on configuration."""
+        if not self.sync_config.enabled:
+            return False
+        return self.sync_config.is_table_synced(table_name)
+
+    def _should_sync_row(
+        self, table_name: str, row_data: Dict[str, Any], row_obj: Any = None
+    ) -> bool:
+        """
+        Check if a specific row should be synced based on filter configuration.
+
+        Args:
+            table_name: Name of the table
+            row_data: Dictionary of row column data
+            row_obj: Optional SQLModel instance
+
+        Returns:
+            True if the row should be synced
+        """
+        if not self._should_sync_table(table_name):
+            return False
+
+        rule = self.sync_config.get_table_rule(table_name)
+        if not rule or not rule.filter:
+            return True
+
+        try:
+            return self.filter_evaluator.evaluate_expression(
+                rule.filter, row_data, row_obj
+            )
+        except Exception as e:
+            import sys
+
+            print(
+                f"WARNING: Error evaluating filter for {table_name}: {e}",
+                file=sys.stderr,
+            )
+            return True  # Default to allowing the row on filter error
+
+    def _get_fields_to_sync(self, table_name: str) -> List[str]:
+        """
+        Get the list of fields that should be synced for a table.
+
+        Respects include_only_columns and exclude_columns from config.
+
+        Args:
+            table_name: Name of the table
+
+        Returns:
+            List of field names to sync
+        """
+        ts = self.schema.get(table_name)
+        if not ts:
+            return []
+
+        rule = self.sync_config.get_table_rule(table_name)
+        if not rule:
+            return ts.fields
+
+        fields = list(ts.fields)
+
+        # Apply include_only_columns if set
+        if rule.include_only_columns:
+            fields = [f for f in fields if f in rule.include_only_columns]
+
+        # Apply exclude_columns
+        if rule.exclude_columns:
+            fields = [f for f in fields if f not in rule.exclude_columns]
+
+        return fields
+
     def _serialize_change(self, ch: ChangeLog) -> ChangePayload:
         ts = self.schema[ch.table]
         data = None
         if ch.op in ("I", "U"):
             obj = self.sess.get(ts.model, ch.pk)
             if obj:
-                data = serialize_row(obj, ts.fields)
+                # Use filtered fields based on sync config
+                fields = self._get_fields_to_sync(ch.table)
+                data = serialize_row(obj, fields)
         return {
             "id": ch.id,
             "table": ch.table,
@@ -102,7 +181,23 @@ class SyncEngine:
                 )
             )
         rows = self.sess.exec(query).all()
-        return [self._serialize_change(r) for r in rows]
+
+        # Filter by configuration
+        result = []
+        for r in rows:
+            if not self._should_sync_table(r.table):
+                continue
+
+            # For row-level filtering, we need to check the actual row
+            obj = self.sess.get(self.schema[r.table].model, r.pk)
+            if obj:
+                row_data = {f: getattr(obj, f) for f in self.schema[r.table].fields}
+                if not self._should_sync_row(r.table, row_data, obj):
+                    continue
+
+            result.append(self._serialize_change(r))
+
+        return result
 
     def remote_changes_since(
         self, since_id: int, limit: int = 1000, exclude_node_id: str | None = None
@@ -129,7 +224,23 @@ class SyncEngine:
                 )
             )
         rows = self.sess.exec(query).all()
-        return [self._serialize_change(r) for r in rows]
+
+        # Filter by configuration
+        result = []
+        for r in rows:
+            if not self._should_sync_table(r.table):
+                continue
+
+            # For row-level filtering, we need to check the actual row
+            obj = self.sess.get(self.schema[r.table].model, r.pk)
+            if obj:
+                row_data = {f: getattr(obj, f) for f in self.schema[r.table].fields}
+                if not self._should_sync_row(r.table, row_data, obj):
+                    continue
+
+            result.append(self._serialize_change(r))
+
+        return result
 
     def _apply_one(self, cp: ChangePayload):
         ts = self.schema[cp["table"]]
@@ -170,6 +281,9 @@ class SyncEngine:
     def apply_remote_changes(self, changes: Iterable[ChangePayload]):
         by_table: Dict[str, List[ChangePayload]] = defaultdict(list)
         for c in changes:
+            # Only apply if table should be synced
+            if not self._should_sync_table(c["table"]):
+                continue
             by_table[c["table"]].append(c)
         for table in self.order:
             for c in by_table.get(table, []):

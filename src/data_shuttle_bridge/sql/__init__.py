@@ -13,6 +13,15 @@ from data_shuttle_bridge.sql.wiring import (
     get_current_node_id,
 )
 from data_shuttle_bridge.sql.sync import SyncEngine, ConflictPolicy
+from data_shuttle_bridge.sql.sync_config import (
+    SyncConfig,
+    SyncScope,
+    TableSyncRule,
+    FilterExpression,
+    FilterCondition,
+    FilterOperator,
+)
+from data_shuttle_bridge.sql.sync_filter import RowFilterEvaluator
 from data_shuttle_bridge.sql.blueprints import sync_blueprint
 from data_shuttle_bridge.sql.transport import InMemoryPeerTransport, HttpPeerTransport
 from data_shuttle_bridge.sql.registry import (
@@ -46,6 +55,13 @@ __all__ = [
     "get_current_node_id",
     "SyncEngine",
     "ConflictPolicy",
+    "SyncConfig",
+    "SyncScope",
+    "TableSyncRule",
+    "FilterExpression",
+    "FilterCondition",
+    "FilterOperator",
+    "RowFilterEvaluator",
     "sync_blueprint",
     "InMemoryPeerTransport",
     "HttpPeerTransport",

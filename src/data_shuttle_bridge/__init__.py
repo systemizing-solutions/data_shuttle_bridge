@@ -32,6 +32,19 @@ from data_shuttle_bridge.sql.tenancy import (
     tenant_sync_blueprint_row_level,
 )
 
+# Multi-Tenant Service
+from data_shuttle_bridge.sql.multi_tenant_service import (
+    Tenant,
+    TenantSecret,
+    SecretManager,
+    TenantManager,
+    create_multi_tenant_app,
+)
+from data_shuttle_bridge.sql.bridge_client import (
+    BridgeClient,
+    BridgeAdminClient,
+)
+
 # File Backup
 from data_shuttle_bridge.file_backup.runtime import (
     init_repo,
@@ -80,6 +93,14 @@ __all__ = [
     "ChangeLogMT",
     "SyncStateMT",
     "tenant_sync_blueprint_row_level",
+    # Multi-Tenant Service
+    "Tenant",
+    "TenantSecret",
+    "SecretManager",
+    "TenantManager",
+    "create_multi_tenant_app",
+    "BridgeClient",
+    "BridgeAdminClient",
     # File
     "init_repo",
     "run_backup",
