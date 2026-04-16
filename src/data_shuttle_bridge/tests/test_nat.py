@@ -529,9 +529,7 @@ class TestDetectNatTypeOutcomes:
         mock_socket_cls.return_value = mock_sock
         mock_sock.recvfrom.side_effect = socket.timeout()
 
-        result = detect_nat_type(
-            [("a.com", 3478), ("b.com", 3478)], local_port=55555
-        )
+        result = detect_nat_type([("a.com", 3478), ("b.com", 3478)], local_port=55555)
         mock_sock.bind.assert_called_once_with(("", 55555))
         assert result == NAT_UNKNOWN
 
@@ -651,13 +649,13 @@ class TestNatPmpForwardSuccess:
         # Build NAT-PMP mapping response
         map_response = struct.pack(
             "!BBHIHHI",
-            0,      # version
-            129,    # opcode (response)
-            0,      # result: success
+            0,  # version
+            129,  # opcode (response)
+            0,  # result: success
             12345,  # epoch
             51820,  # internal port
             51820,  # external port
-            7200,   # lifetime
+            7200,  # lifetime
         )
         # Build external IP response
         ip_bytes = socket.inet_aton("1.2.3.4")
@@ -682,8 +680,13 @@ class TestNatPmpForwardSuccess:
         # Build NAT-PMP response with error
         map_response = struct.pack(
             "!BBHIHHI",
-            0, 129, 1,  # result_code=1 (error)
-            12345, 51820, 51820, 7200,
+            0,
+            129,
+            1,  # result_code=1 (error)
+            12345,
+            51820,
+            51820,
+            7200,
         )
         mock_sock.recvfrom.return_value = (map_response, ("192.168.1.1", 5351))
 
@@ -700,7 +703,14 @@ class TestNatPmpForwardSuccess:
 
         # Build valid mapping response
         map_response = struct.pack(
-            "!BBHIHHI", 0, 129, 0, 12345, 51820, 51820, 7200,
+            "!BBHIHHI",
+            0,
+            129,
+            0,
+            12345,
+            51820,
+            51820,
+            7200,
         )
         mock_sock.recvfrom.side_effect = [
             (map_response, ("192.168.1.1", 5351)),

@@ -857,9 +857,7 @@ class TestDetectAndApplyDrift:
         try:
             from data_shuttle_bridge.sql.versioning_models import SchemaVersion
 
-            versions = reg_session.exec(
-                select(SchemaVersion)
-            ).all()
+            versions = reg_session.exec(select(SchemaVersion)).all()
             for v in versions:
                 reg_session.delete(v)
             reg_session.commit()
@@ -1008,9 +1006,7 @@ class TestQueryEndpointWithData:
             data=json.dumps(
                 {
                     "table": "sa_test_users",
-                    "filters": [
-                        {"column": "name", "operator": "like", "value": "A%"}
-                    ],
+                    "filters": [{"column": "name", "operator": "like", "value": "A%"}],
                 }
             ),
             content_type="application/json",
@@ -1043,9 +1039,7 @@ class TestQueryEndpointWithData:
         c, api_key = tenant_with_data
         resp = c.post(
             "/api/data/query",
-            data=json.dumps(
-                {"table": "sa_test_users", "limit": 1, "offset": 0}
-            ),
+            data=json.dumps({"table": "sa_test_users", "limit": 1, "offset": 0}),
             content_type="application/json",
             headers={"X-API-Key": api_key},
         )
