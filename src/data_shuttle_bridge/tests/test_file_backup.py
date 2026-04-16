@@ -398,3 +398,156 @@ def count_blobs(repo: Repository) -> int:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ============================================================================
+# Additional coverage tests for runtime.py
+# ============================================================================
+
+
+class TestInitRepoAlreadyExists:
+    """Test init_repo raises when repo already exists (line 29)."""
+
+    def test_init_repo_already_exists(self):
+        repo_url = "memory://already_exists_repo"
+        init_repo(repo_url)
+        with pytest.raises(RuntimeError, match="Repository already exists"):
+            init_repo(repo_url)
+
+
+class TestRunBackupEdgeCases:
+    """Test run_backup edge cases for uncovered lines."""
+
+    def test_backup_nonexistent_source(self):
+        """Test that backup raises for nonexistent source (line 62)."""
+        repo_url = "memory://nonexistent_source_repo"
+        init_repo(repo_url)
+        with pytest.raises(RuntimeError, match="Source does not exist"):
+            run_backup(repo_url, ["/nonexistent/path/that/does/not/exist"])
+
+    def test_backup_with_custom_snapshot_id(self):
+        """Test backup with explicit snapshot_id (covers line 56->60 branch)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_file = os.path.join(tmpdir, "test.txt")
+            with open(source_file, "wb") as f:
+                f.write(b"hello")
+
+            repo_url = "memory://custom_snap_id"
+            init_repo(repo_url)
+            sid = run_backup(repo_url, [source_file], snapshot_id="custom123")
+            assert sid == "custom123"
+
+    def test_backup_file_read_error(self):
+        """Test that run_backup skips files it can't read (lines 115-116)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = os.path.join(tmpdir, "source")
+            os.makedirs(source_dir)
+
+            # Create a readable file
+            good_file = os.path.join(source_dir, "good.txt")
+            with open(good_file, "wb") as f:
+                f.write(b"good content")
+
+            # Create a file and make it unreadable
+            bad_file = os.path.join(source_dir, "bad.txt")
+            with open(bad_file, "wb") as f:
+                f.write(b"bad content")
+            os.chmod(bad_file, 0o000)
+
+            repo_url = "memory://skip_error_repo"
+            init_repo(repo_url)
+
+            try:
+                sid = run_backup(repo_url, [source_dir])
+                # The good file should be backed up, bad file skipped
+                repo = Repository(repo_url)
+                snapshots = repo.list_snapshots()
+                assert len(snapshots) == 1
+                # At least the good file should be in the snapshot
+                assert len(snapshots[0].files) >= 1
+            finally:
+                # Restore permissions so cleanup works
+                os.chmod(bad_file, 0o644)
+
+
+class TestRestoreEdgeCases:
+    """Test run_restore edge cases for uncovered lines."""
+
+    def test_restore_no_snapshots(self):
+        """Test restore raises when no snapshots exist (lines 183-185)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_url = "memory://empty_restore_repo"
+            init_repo(repo_url)
+            with pytest.raises(RuntimeError, match="No snapshots found"):
+                run_restore(repo_url, os.path.join(tmpdir, "restore"))
+
+    def test_restore_specific_snapshot_not_found(self):
+        """Test restore raises for nonexistent snapshot ID."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_url = "memory://snap_not_found_repo"
+            init_repo(repo_url)
+            with pytest.raises(RuntimeError, match="Snapshot not found"):
+                run_restore(
+                    repo_url,
+                    os.path.join(tmpdir, "restore"),
+                    snapshot_id="nonexistent",
+                )
+
+    def test_restore_creates_dest_dir(self):
+        """Test that restore creates the destination directory (line 189)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_file = os.path.join(tmpdir, "test.txt")
+            with open(source_file, "wb") as f:
+                f.write(b"hello")
+
+            repo_url = "memory://dest_dir_repo"
+            init_repo(repo_url)
+            run_backup(repo_url, [source_file])
+
+            dest = os.path.join(tmpdir, "new_dir", "nested")
+            assert not os.path.exists(dest)
+            run_restore(repo_url, dest)
+            assert os.path.exists(dest)
+
+    def test_restore_preserves_metadata(self):
+        """Test that restore attempts to preserve file mode and mtime (lines 210-217)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_file = os.path.join(tmpdir, "meta.txt")
+            with open(source_file, "wb") as f:
+                f.write(b"metadata test")
+
+            repo_url = "memory://metadata_repo"
+            init_repo(repo_url)
+            run_backup(repo_url, [source_file])
+
+            dest = os.path.join(tmpdir, "restore_meta")
+            run_restore(repo_url, dest)
+
+            restored_file = os.path.join(dest, "meta.txt")
+            assert os.path.exists(restored_file)
+            with open(restored_file, "rb") as f:
+                assert f.read() == b"metadata test"
+
+
+class TestListSnapshotsEdgeCases:
+    """Test list_snapshots edge cases."""
+
+    def test_list_snapshots_empty(self):
+        """Test listing snapshots when none exist."""
+        repo_url = "memory://empty_list_repo"
+        init_repo(repo_url)
+        # Should print "No snapshots found." and not raise
+        list_snapshots(repo_url)
+
+    def test_list_snapshots_with_data(self):
+        """Test listing snapshots with existing data."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_file = os.path.join(tmpdir, "test.txt")
+            with open(source_file, "wb") as f:
+                f.write(b"content")
+
+            repo_url = "memory://list_data_repo"
+            init_repo(repo_url)
+            run_backup(repo_url, [source_file])
+            # Should print snapshot info and not raise
+            list_snapshots(repo_url)

@@ -14,7 +14,11 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlmodel import create_engine as sqlmodel_create_engine
+from sqlmodel import (
+    create_engine as sqlmodel_create_engine,
+    Session as SMSession,
+    select,
+)
 from typing import Optional
 
 from data_shuttle_bridge.sql.mixins import SyncRowSAMixin, SyncRowSQLModelMixin
@@ -89,7 +93,7 @@ def sa_session(setup_node_id):
     engine = create_engine("sqlite:///:memory:")
     SABase.metadata.create_all(engine)
 
-    SessionLocal = sessionmaker(bind=engine)
+    SessionLocal = sessionmaker(bind=engine, class_=SMSession)
     session = SessionLocal()
 
     yield session
@@ -104,7 +108,7 @@ def sm_session(setup_node_id):
     engine = sqlmodel_create_engine("sqlite:///:memory:")
     SyncRowSQLModelMixin.metadata.create_all(engine)
 
-    SessionLocal = sessionmaker(bind=engine)
+    SessionLocal = sessionmaker(bind=engine, class_=SMSession)
     session = SessionLocal()
 
     yield session
@@ -150,7 +154,7 @@ class TestSAMixins:
         user_id = user.id
 
         # Retrieve user
-        retrieved = sa_session.query(SAUser).filter_by(id=user_id).first()
+        retrieved = sa_session.exec(select(SAUser).where(SAUser.id == user_id)).first()
         assert retrieved is not None
         assert retrieved.name == "Charlie"
         assert retrieved.email == "charlie@example.com"
@@ -168,7 +172,9 @@ class TestSAMixins:
         sa_session.commit()
 
         # Verify soft delete marker exists
-        deleted_user = sa_session.query(SAUser).filter_by(id=user_id).first()
+        deleted_user = sa_session.exec(
+            select(SAUser).where(SAUser.id == user_id)
+        ).first()
         assert deleted_user is not None
         assert deleted_user.deleted_at is not None
 
@@ -268,7 +274,7 @@ class TestSMSyncMixins:
         user_id = user.id
 
         # Retrieve user
-        retrieved = sm_session.query(SMUser).filter_by(id=user_id).first()
+        retrieved = sm_session.exec(select(SMUser).where(SMUser.id == user_id)).first()
         assert retrieved is not None
         assert retrieved.name == "Henry"
         assert retrieved.email == "henry@example.com"
@@ -367,7 +373,7 @@ class TestSyncIntegration:
         sa_session.commit()
 
         # Verify both users exist with unique IDs
-        users = sa_session.query(SAUser).all()
+        users = sa_session.exec(select(SAUser)).all()
         assert len(users) == 2
         assert users[0].id != users[1].id
 
@@ -385,9 +391,121 @@ class TestSyncIntegration:
         sa_session.commit()
 
         # Query active users (deleted_at is None)
-        active_users = sa_session.query(SAUser).filter(SAUser.deleted_at == None).all()
+        active_users = sa_session.exec(
+            select(SAUser).where(SAUser.deleted_at == None)
+        ).all()
         assert len(active_users) == 1
         assert active_users[0].name == "Active"
+
+
+# ============================================================================
+# IDs Module Coverage Tests
+# ============================================================================
+
+
+class TestIDsCoverage:
+    """Additional tests for ids.py to improve coverage."""
+
+    def test_set_id_generator_with_int_node_id(self):
+        """Test set_id_generator with integer node_id (line 39)."""
+        from data_shuttle_bridge.sql.ids import set_id_generator, get_id_generator
+
+        set_id_generator(42)
+        gen = get_id_generator()
+        assert gen.node_id == 42
+        id1 = gen()
+        assert isinstance(id1, int)
+
+    def test_get_id_generator_raises_when_not_set(self):
+        """Test RuntimeError when ID generator not initialized (lines 58-62)."""
+        from data_shuttle_bridge.sql.ids import (
+            get_id_generator,
+            clear_id_generator,
+            _local,
+            _default_id_generator,
+        )
+        import data_shuttle_bridge.sql.ids as ids_mod
+
+        # Clear thread-local
+        clear_id_generator()
+        # Save and clear default
+        saved = ids_mod._default_id_generator
+        ids_mod._default_id_generator = None
+        try:
+            with pytest.raises(RuntimeError, match="ID generator not initialized"):
+                get_id_generator()
+        finally:
+            ids_mod._default_id_generator = saved
+
+    def test_clear_id_generator(self):
+        """Test clear_id_generator clears thread-local (lines 71-72)."""
+        from data_shuttle_bridge.sql.ids import (
+            set_id_generator,
+            clear_id_generator,
+            _local,
+        )
+
+        set_id_generator("test")
+        assert hasattr(_local, "id_generator") and _local.id_generator is not None
+        clear_id_generator()
+        assert _local.id_generator is None
+
+    def test_clear_id_generator_when_not_set(self):
+        """Test clear_id_generator when no generator was ever set."""
+        from data_shuttle_bridge.sql.ids import clear_id_generator, _local
+
+        # Remove attribute if it exists
+        if hasattr(_local, "id_generator"):
+            delattr(_local, "id_generator")
+        # Should not raise
+        clear_id_generator()
+
+    def test_ksorted_id_invalid_node_id(self):
+        """Test KSortedID raises ValueError for out-of-range node_id (line 78)."""
+        from data_shuttle_bridge.sql.ids import KSortedID, MAX_NODE
+
+        with pytest.raises(ValueError, match="node_id out of range"):
+            KSortedID(node_id=-1)
+        with pytest.raises(ValueError, match="node_id out of range"):
+            KSortedID(node_id=MAX_NODE + 1)
+
+    def test_ksorted_id_negative_ms_sleeps(self):
+        """Test KSortedID handles clock before epoch (lines 91-92)."""
+        from unittest.mock import patch
+        from data_shuttle_bridge.sql.ids import KSortedID, EPOCH_MS
+
+        gen = KSortedID(node_id=1)
+        # First call returns time before epoch, second returns valid
+        with patch.object(
+            gen,
+            "_now_ms",
+            side_effect=[EPOCH_MS - 100, EPOCH_MS + 1000],
+        ):
+            with patch("data_shuttle_bridge.sql.ids.time.sleep") as mock_sleep:
+                _id = gen()
+                mock_sleep.assert_called_once()
+                assert isinstance(_id, int)
+
+    def test_ksorted_id_sequence_overflow(self):
+        """Test KSortedID handles sequence overflow (lines 96-100)."""
+        from unittest.mock import patch
+        from data_shuttle_bridge.sql.ids import KSortedID, EPOCH_MS, MAX_SEQUENCE
+
+        gen = KSortedID(node_id=1)
+        # Set state: same ms, seq about to overflow
+        gen._last_ms = 5000
+        gen._seq = MAX_SEQUENCE  # next increment wraps to 0
+
+        # _now_ms returns same ms first (overflow), then new ms
+        with patch.object(
+            gen,
+            "_now_ms",
+            side_effect=[EPOCH_MS + 5000, EPOCH_MS + 5000, EPOCH_MS + 5001],
+        ):
+            _id = gen()
+            assert isinstance(_id, int)
+            # Should have moved to the next millisecond
+            assert gen._last_ms == 5001
 
 
 if __name__ == "__main__":

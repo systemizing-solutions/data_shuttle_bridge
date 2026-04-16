@@ -29,6 +29,8 @@ fsspec = "^2024.2.0"
 cryptography = "^42.0.0"
 itsdangerous = "^2.1.2"
 requests = "^2.31.0"
+pyyaml = "^6.0"
+jsonschema = "^4.26.0"
 
 # Include optional dependencies
 Flask = { version = "^3.0.3", optional = true }
@@ -43,6 +45,7 @@ flake8-html = "^0.4.3"
 isort = "^5.13.2"
 mypy = "^1.13.0"
 pytest = "^8.3.3"
+pytest-cov = "^7.1.0"
 
 [tool.poetry.extras]
 flask = [
@@ -56,6 +59,11 @@ flask = [
 
 [tool.poetry.scripts]
 data_shuttle_bridge = "data_shuttle_bridge.cli:main" 
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    'ignore:Field name "schema_json" in "SchemaVersion" shadows an attribute in parent "SQLModel":UserWarning',
+]
 
 [build-system]
 requires = ["poetry-core"]

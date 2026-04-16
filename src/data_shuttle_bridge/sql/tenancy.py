@@ -4,15 +4,16 @@ from typing import Any, Callable, Iterable, Optional, Type, Dict, List, Set, Tup
 
 from flask import Blueprint, request, jsonify, g
 
-from sqlmodel import SQLModel, Field, select, Column as SQLModelColumn
+from sqlmodel import SQLModel, Field, select, Column as SQLModelColumn, Session
 
 from sqlalchemy import event, String as SA_String, Integer as SA_Integer, JSON
-from sqlalchemy.orm import Session
 
-from data_shuttle_bridge.sql.typing_ import ChangePayload
-from data_shuttle_bridge.sql.payloads import TableSchema, apply_row
+from data_shuttle_bridge.models.typing_ import ChangePayload
+from data_shuttle_bridge.models.payloads import TableSchema
+from data_shuttle_bridge.models.enums import ConflictPolicy
+from data_shuttle_bridge.models.tenancy import ChangeLogMT, SyncStateMT
+from data_shuttle_bridge.sql.payloads import apply_row
 from data_shuttle_bridge.sql.schema import build_schema
-from data_shuttle_bridge.sql.sync import ConflictPolicy
 from data_shuttle_bridge.sql.wiring import _summary
 
 # -------------------------------
@@ -83,44 +84,6 @@ def tenant_sync_blueprint_db_per_tenant(
 # -------------------------------
 # B) ROW-LEVEL TENANCY (single DB) – optional
 # -------------------------------
-
-
-class ChangeLogMT(SQLModel, table=True):
-    """
-    Tenant-scoped change log. Use this when multiple tenants share a single database.
-    """
-
-    __tablename__ = "change_log_mt"
-
-    id: int | None = Field(default=None, primary_key=True)
-    tenant: str = Field(
-        sa_column=SQLModelColumn(SA_String(64), nullable=False, index=True)
-    )
-    table: str = Field(sa_column=SQLModelColumn(SA_String(64), nullable=False))
-    pk: int = Field(
-        nullable=False
-    )  # use BigInteger via SQLModel type adapters if needed
-    op: str = Field(sa_column=SQLModelColumn(SA_String(1), nullable=False))
-    version: int = Field(sa_column=SQLModelColumn(SA_Integer, nullable=False))
-    summary: Optional[Dict[str, Any]] = Field(
-        default=None,
-        sa_column=SQLModelColumn(
-            JSON,
-            nullable=True,
-        ),
-    )
-
-
-class SyncStateMT(SQLModel, table=True):
-    """
-    Tenant-scoped sync watermarks.
-    """
-
-    __tablename__ = "sync_state_mt"
-    tenant: str = Field(sa_column=SQLModelColumn(SA_String(64), primary_key=True))
-    peer_id: str = Field(sa_column=SQLModelColumn(SA_String(64), primary_key=True))
-    last_pushed_change_id: int = Field(default=0, nullable=False)
-    last_pulled_change_id: int = Field(default=0, nullable=False)
 
 
 def attach_change_hooks_mt_for_models(

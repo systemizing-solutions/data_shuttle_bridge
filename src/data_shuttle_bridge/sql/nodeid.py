@@ -1,17 +1,12 @@
 import json
 import os
 import uuid
-from dataclasses import dataclass
 from typing import Optional
+
+from data_shuttle_bridge.models.nodeid import ClientNodeConfig
 
 DEFAULT_CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".localfirst_sync")
 DEFAULT_CONFIG_PATH = os.path.join(DEFAULT_CONFIG_DIR, "config.json")
-
-
-@dataclass
-class ClientNodeConfig:
-    device_key: str
-    node_id: Optional[int] = None
 
 
 class ClientNodeManager:

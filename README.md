@@ -46,6 +46,78 @@ Lightweight backup tool with multi-backend support:
 
 current_version = "v0.0.1"
 
+## Peer-to-Peer Sync (WireGuard)
+
+Sync data directly between devices over an encrypted WireGuard tunnel — **no central
+server, no third-party relay, no data caps or time limits**.
+
+### How it works
+
+```
+┌──────────┐   WireGuard tunnel (encrypted, direct)   ┌──────────┐
+│  Peer A  │◄────────────────────────────────────────►│  Peer B  │
+│ 10.0.0.1 │   UDP hole-punch / UPnP / port-forward   │ 10.0.0.2 │
+└──────────┘                                           └──────────┘
+```
+
+1. Both peers exchange tokens out-of-band (copy-paste via chat/email)
+2. WireGuard creates a direct encrypted tunnel between them
+3. The existing HTTP sync protocol runs over the tunnel — zero code changes needed
+
+### Quick start
+#### Install WireGuard
+[https://www.wireguard.com/install/](https://www.wireguard.com/install/)
+```bash
+brew install wireguard-tools   # macOS
+# apt install wireguard        # Linux
+```
+
+#### 
+```bash
+# Peer A: generate invite
+data-shuttle p2p init
+data-shuttle p2p invite --sync-port 5000
+# → prints an invite token
+
+# Peer B: join (paste the token)
+data-shuttle p2p join <invite_token>
+# → prints a response token
+
+# Peer A: complete (paste the response)
+data-shuttle p2p complete <response_token>
+
+# Both peers: bring tunnel up
+sudo data-shuttle p2p up
+
+# Both peers: verify connectivity
+data-shuttle p2p status
+```
+
+### NAT traversal
+
+Endpoint discovery is automatic — you don't need to know your public IP:
+
+| NAT Type | Works automatically? | Method |
+|---|---|---|
+| Public IP / no NAT | Yes | Direct connection |
+| Full / restricted / port-restricted cone | Yes | STUN + UDP hole-punch |
+| UPnP-enabled router | Yes | Auto port-forward |
+| Symmetric NAT | No — manual port-forward needed | CLI warns you |
+
+Install `miniupnpc` for automatic UPnP port forwarding: `pip install miniupnpc`
+
+### Programmatic usage
+
+```python
+from data_shuttle_bridge.p2p.transport_wireguard import WireGuardPeerTransport
+
+# Peer B connects to Peer A's WireGuard IP
+transport = WireGuardPeerTransport(peer_virtual_ip="10.0.0.1", sync_port=5000)
+pulled, pushed = sync_engine.pull_then_push(transport, batch=100)
+```
+
+See [examples/p2p_sync_demo.py](examples/p2p_sync_demo.py) for a full working example.
+
 ## Project Structure
 
 ```
@@ -70,6 +142,13 @@ src/data_shuttle_bridge/
 │   ├── repo/repository.py        # Repository management
 │   ├── pipeline/chunking.py      # Chunking strategies
 │   └── ...
+├── p2p/                          # Peer-to-peer WireGuard sync
+│   ├── cli.py                    # P2P CLI commands
+│   ├── wireguard.py              # Key generation, config, tunnel lifecycle
+│   ├── nat.py                    # STUN, UPnP/NAT-PMP, NAT traversal
+│   ├── invite.py                 # Invite/join token exchange
+│   ├── transport_wireguard.py    # WireGuardPeerTransport
+│   └── __init__.py
 ├── cli.py                        # Main CLI entry point
 └── __init__.py                   # Package exports
 
@@ -521,6 +600,12 @@ class CompressedChunker(ChunkingStrategy):
         """Chunk and compress data."""
         # Your compression logic here
         pass
+```
+
+## Tests
+```shell
+pytest .
+pytest --cov=src --cov-report html
 ```
 
 ### Testing File Backup

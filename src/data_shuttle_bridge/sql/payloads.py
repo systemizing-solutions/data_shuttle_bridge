@@ -1,6 +1,8 @@
 from typing import Dict, Any, Iterable, Type, Set
 from datetime import datetime
 
+from data_shuttle_bridge.models.payloads import TableSchema
+
 
 def serialize_row(obj: object, include_fields: Iterable[str]) -> Dict[str, Any]:
     d = {}
@@ -27,12 +29,3 @@ def apply_row(obj: object, data: Dict[str, Any], exclude: Iterable[str] = ()):
                 # Not a datetime, keep original value
                 pass
         setattr(obj, k, v)
-
-
-class TableSchema:
-    def __init__(
-        self, model: Type, fields: Iterable[str], parents: Iterable[str] | None = None
-    ):
-        self.model = model
-        self.fields = list(fields)
-        self.parents: Set[str] = set(parents or [])
