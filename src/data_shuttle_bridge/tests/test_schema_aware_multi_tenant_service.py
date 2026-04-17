@@ -1075,3 +1075,198 @@ class TestApiKeyViaQueryParam:
                 # Use query param instead of header
                 resp = c.get(f"/api/secrets?api_key={api_key}")
                 assert resp.status_code == 200
+
+
+# ============================================================================
+# Additional coverage tests for uncovered branches
+# ============================================================================
+
+
+class TestTenantEndpointAuthFailures:
+    """Tests for auth failure branches on get_tenant and delete_tenant endpoints."""
+
+    def test_get_tenant_unauthorized(self, schema_app):
+        """Cover line 571: get_tenant with wrong master key."""
+        app, _ = schema_app
+        with app.test_client() as c:
+            resp = c.get(
+                "/api/tenants/some-slug",
+                headers={"X-Tenant-Key": "wrong_key"},
+            )
+            assert resp.status_code == 401
+
+    def test_delete_tenant_unauthorized(self, schema_app):
+        """Cover line 591: delete_tenant with wrong master key."""
+        app, _ = schema_app
+        with app.test_client() as c:
+            resp = c.delete(
+                "/api/tenants/some-slug",
+                headers={"X-Tenant-Key": "wrong_key"},
+            )
+            assert resp.status_code == 401
+
+
+class TestCreateTenantValueError:
+    """Tests for ValueError handling on create_tenant endpoint."""
+
+    def test_create_tenant_value_error(self, schema_app):
+        """Cover lines 544-545: create_tenant ValueError."""
+        app, mgr = schema_app
+        with app.test_client() as c:
+            # Patch create_tenant to raise ValueError
+            with patch.object(
+                mgr, "create_tenant", side_effect=ValueError("bad input")
+            ):
+                resp = c.post(
+                    "/api/tenants",
+                    data=json.dumps({"name": "Some Corp"}),
+                    content_type="application/json",
+                    headers={"X-Tenant-Key": "master_secret"},
+                )
+                assert resp.status_code == 400
+                assert resp.get_json()["error"] == "bad input"
+
+
+class TestSetSecretValueError:
+    """Tests for ValueError handling on set_secret endpoint."""
+
+    def test_set_secret_value_error(self, schema_app):
+        """Cover lines 617-618: set_secret ValueError."""
+        app, mgr = schema_app
+        with app.test_client() as c:
+            resp = c.post(
+                "/api/tenants",
+                data=json.dumps({"name": "SecErr Tenant"}),
+                content_type="application/json",
+                headers={"X-Tenant-Key": "master_secret"},
+            )
+            api_key = resp.get_json()["api_key"]
+
+            with patch.object(mgr, "set_secret", side_effect=ValueError("bad secret")):
+                resp = c.post(
+                    "/api/secrets",
+                    data=json.dumps({"key": "k", "secret": "v"}),
+                    content_type="application/json",
+                    headers={"X-API-Key": api_key},
+                )
+                assert resp.status_code == 400
+                assert resp.get_json()["error"] == "bad secret"
+
+    def test_get_secret_invalid_api_key(self, schema_app):
+        """Cover line 625: get_secret with invalid API key."""
+        app, _ = schema_app
+        with app.test_client() as c:
+            resp = c.get(
+                "/api/secrets/some_key",
+                headers={"X-API-Key": "invalid_api_key"},
+            )
+            assert resp.status_code == 401
+
+
+class TestQueryEndpointFilterOperators:
+    """Tests for gt, gte, lt, lte filter operators in query endpoint."""
+
+    @pytest.fixture
+    def tenant_with_data(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            master_db_url = f"sqlite:///{tmpdir}/master.db"
+            app, mgr = create_schema_aware_multi_tenant_app(
+                master_db_url=master_db_url,
+                models=[SAUser],
+                tenant_base_path=tmpdir,
+                tenant_master_key="master_secret",
+            )
+            app.config["TESTING"] = True
+
+            with app.test_client() as c:
+                resp = c.post(
+                    "/api/tenants",
+                    data=json.dumps({"name": "Filter Tenant"}),
+                    content_type="application/json",
+                    headers={"X-Tenant-Key": "master_secret"},
+                )
+                api_key = resp.get_json()["api_key"]
+                tenant = mgr.get_tenant_by_api_key(api_key)
+
+                from data_shuttle_bridge.sql.ids import set_id_generator
+
+                set_id_generator("test_node")
+                tenant_engine = mgr._tenant_engines[tenant.id]
+                SABase.metadata.create_all(tenant_engine)
+                sf = mgr.get_session_factory_for_tenant(tenant)
+                with sf() as sess:
+                    u1 = SAUser(name="Alice", email="alice@example.com")
+                    u2 = SAUser(name="Bob", email="bob@example.com")
+                    u3 = SAUser(name="Charlie", email="charlie@example.com")
+                    sess.add(u1)
+                    sess.add(u2)
+                    sess.add(u3)
+                    sess.commit()
+
+                yield c, api_key
+
+    def test_query_gt_filter(self, tenant_with_data):
+        """Cover line 878, 913: gt operator."""
+        c, api_key = tenant_with_data
+        resp = c.post(
+            "/api/data/query",
+            data=json.dumps(
+                {
+                    "table": "sa_test_users",
+                    "filters": [{"column": "id", "operator": "gt", "value": 0}],
+                }
+            ),
+            content_type="application/json",
+            headers={"X-API-Key": api_key},
+        )
+        assert resp.status_code == 200
+
+    def test_query_gte_filter(self, tenant_with_data):
+        """Cover line 880, 915: gte operator."""
+        c, api_key = tenant_with_data
+        resp = c.post(
+            "/api/data/query",
+            data=json.dumps(
+                {
+                    "table": "sa_test_users",
+                    "filters": [{"column": "id", "operator": "gte", "value": 1}],
+                }
+            ),
+            content_type="application/json",
+            headers={"X-API-Key": api_key},
+        )
+        assert resp.status_code == 200
+
+    def test_query_lt_filter(self, tenant_with_data):
+        """Cover line 882, 917: lt operator."""
+        c, api_key = tenant_with_data
+        resp = c.post(
+            "/api/data/query",
+            data=json.dumps(
+                {
+                    "table": "sa_test_users",
+                    "filters": [{"column": "id", "operator": "lt", "value": 999999999}],
+                }
+            ),
+            content_type="application/json",
+            headers={"X-API-Key": api_key},
+        )
+        assert resp.status_code == 200
+
+    def test_query_lte_filter(self, tenant_with_data):
+        """Cover line 884, 919: lte operator."""
+        c, api_key = tenant_with_data
+        resp = c.post(
+            "/api/data/query",
+            data=json.dumps(
+                {
+                    "table": "sa_test_users",
+                    "filters": [
+                        {"column": "id", "operator": "lte", "value": 999999999}
+                    ],
+                }
+            ),
+            content_type="application/json",
+            headers={"X-API-Key": api_key},
+        )
+        assert resp.status_code == 200

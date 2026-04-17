@@ -375,7 +375,7 @@ class TestP2PCLI:
             assert result == 1
 
     @patch(
-        "data_shuttle_bridge.p2p.transport_wireguard.WireGuardPeerTransport",
+        "data_shuttle_bridge.p2p.tunnel.TunnelPeerTransport",
     )
     def test_cmd_p2p_sync_success(self, mock_transport_cls):
         from data_shuttle_bridge.p2p.cli import cmd_p2p_sync
@@ -383,7 +383,7 @@ class TestP2PCLI:
         mock_transport = MagicMock()
         mock_transport.__enter__ = MagicMock(return_value=mock_transport)
         mock_transport.__exit__ = MagicMock(return_value=False)
-        mock_transport_cls.return_value = mock_transport
+        mock_transport_cls.from_config.return_value = mock_transport
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = os.path.join(tmpdir, "wg_shuttle.conf")
@@ -403,7 +403,7 @@ class TestP2PCLI:
                 assert result == 0
 
     @patch(
-        "data_shuttle_bridge.p2p.transport_wireguard.WireGuardPeerTransport",
+        "data_shuttle_bridge.p2p.tunnel.TunnelPeerTransport",
     )
     def test_cmd_p2p_sync_runtime_error(self, mock_transport_cls):
         from data_shuttle_bridge.p2p.cli import cmd_p2p_sync
@@ -411,7 +411,7 @@ class TestP2PCLI:
         mock_transport = MagicMock()
         mock_transport.__enter__ = MagicMock(side_effect=RuntimeError("connect failed"))
         mock_transport.__exit__ = MagicMock(return_value=False)
-        mock_transport_cls.return_value = mock_transport
+        mock_transport_cls.from_config.return_value = mock_transport
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = os.path.join(tmpdir, "wg_shuttle.conf")
@@ -428,7 +428,7 @@ class TestP2PCLI:
                 assert result == 1
 
     @patch(
-        "data_shuttle_bridge.p2p.transport_wireguard.WireGuardPeerTransport",
+        "data_shuttle_bridge.p2p.tunnel.TunnelPeerTransport",
     )
     def test_cmd_p2p_sync_keep_up(self, mock_transport_cls):
         from data_shuttle_bridge.p2p.cli import cmd_p2p_sync
@@ -436,7 +436,7 @@ class TestP2PCLI:
         mock_transport = MagicMock()
         mock_transport.__enter__ = MagicMock(return_value=mock_transport)
         mock_transport.__exit__ = MagicMock(return_value=False)
-        mock_transport_cls.return_value = mock_transport
+        mock_transport_cls.from_config.return_value = mock_transport
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = os.path.join(tmpdir, "wg_shuttle.conf")

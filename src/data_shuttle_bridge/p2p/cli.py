@@ -213,12 +213,12 @@ def cmd_p2p_sync(args: argparse.Namespace) -> int:
         print("Cannot determine peer IP. Run invite/join flow first.", file=sys.stderr)
         return 1
 
-    from data_shuttle_bridge.p2p.transport_wireguard import WireGuardPeerTransport
+    from data_shuttle_bridge.p2p.tunnel import TunnelPeerTransport
 
-    transport = WireGuardPeerTransport(
+    transport = TunnelPeerTransport.from_config(
+        "wireguard",
         peer_virtual_ip=peer_ip,
         sync_port=sync_port,
-        manage_tunnel=True,
         wg_config_path=config_path,
     )
 
@@ -231,10 +231,10 @@ def cmd_p2p_sync(args: argparse.Namespace) -> int:
             # This command validates connectivity. For full sync, use the
             # programmatic API (see examples/p2p_sync_demo.py).
             print("\nTo sync programmatically:")
+            print("  from data_shuttle_bridge.p2p.tunnel import TunnelPeerTransport")
             print(
-                "  from data_shuttle_bridge.p2p.transport_wireguard import WireGuardPeerTransport"
+                f'  transport = TunnelPeerTransport.from_config("wireguard", peer_virtual_ip="{peer_ip}", sync_port={sync_port})'
             )
-            print(f'  transport = WireGuardPeerTransport("{peer_ip}", {sync_port})')
             print("  pulled, pushed = sync_engine.pull_then_push(transport)")
     except RuntimeError as e:
         print(f"Error: {e}", file=sys.stderr)

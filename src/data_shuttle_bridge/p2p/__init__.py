@@ -25,3 +25,15 @@ from data_shuttle_bridge.p2p.invite import (
     accept_invite,
     complete_invite,
 )
+from data_shuttle_bridge.p2p.tunnel import (
+    TunnelStrategy,
+    SubprocessTunnelStrategy,
+    TunnelPeerTransport,
+    register_tunnel_strategy,
+    get_tunnel_strategy_class,
+    list_tunnel_strategies,
+    DEFAULT_STRATEGY,
+)
+from data_shuttle_bridge.p2p.tunnel_wireguard import WireGuardTunnelStrategy
+from data_shuttle_bridge.p2p.tunnel_cloudflared import CloudflaredTunnelStrategy
+from data_shuttle_bridge.p2p.tunnel_ngrok import NgrokTunnelStrategy

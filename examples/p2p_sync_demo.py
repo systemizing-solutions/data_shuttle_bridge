@@ -55,7 +55,7 @@ from data_shuttle_bridge.sql.wiring import (
     attach_change_hooks_for_models,
     set_id_generator,
 )
-from data_shuttle_bridge.p2p.transport_wireguard import WireGuardPeerTransport
+from data_shuttle_bridge.p2p.tunnel import TunnelPeerTransport
 
 
 # ===== Models (must match on both peers) =====
@@ -123,9 +123,11 @@ def run_client(peer_ip: str, sync_port: int = 5000):
 
     schema = build_schema(MODELS)
 
-    transport = WireGuardPeerTransport(
+    transport = TunnelPeerTransport.from_config(
+        strategy="wireguard",
         peer_virtual_ip=peer_ip,
         sync_port=sync_port,
+        manage_tunnel=False,
     )
 
     with Session(engine) as sess:

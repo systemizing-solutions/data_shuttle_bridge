@@ -109,10 +109,12 @@ Install `miniupnpc` for automatic UPnP port forwarding: `pip install miniupnpc`
 ### Programmatic usage
 
 ```python
-from data_shuttle_bridge.p2p.transport_wireguard import WireGuardPeerTransport
+from data_shuttle_bridge.p2p.tunnel import TunnelPeerTransport
 
 # Peer B connects to Peer A's WireGuard IP
-transport = WireGuardPeerTransport(peer_virtual_ip="10.0.0.1", sync_port=5000)
+transport = TunnelPeerTransport.from_config(
+    strategy="wireguard", peer_virtual_ip="10.0.0.1", sync_port=5000
+)
 pulled, pushed = sync_engine.pull_then_push(transport, batch=100)
 ```
 
@@ -142,12 +144,15 @@ src/data_shuttle_bridge/
 │   ├── repo/repository.py        # Repository management
 │   ├── pipeline/chunking.py      # Chunking strategies
 │   └── ...
-├── p2p/                          # Peer-to-peer WireGuard sync
+├── p2p/                          # Peer-to-peer sync (pluggable tunnels)
 │   ├── cli.py                    # P2P CLI commands
+│   ├── tunnel.py                 # TunnelStrategy ABC, registry, TunnelPeerTransport
+│   ├── tunnel_wireguard.py       # WireGuard strategy (auto-install)
+│   ├── tunnel_cloudflared.py     # Cloudflare quick-tunnel strategy (auto-install)
+│   ├── tunnel_ngrok.py           # ngrok strategy (auto-install)
 │   ├── wireguard.py              # Key generation, config, tunnel lifecycle
 │   ├── nat.py                    # STUN, UPnP/NAT-PMP, NAT traversal
 │   ├── invite.py                 # Invite/join token exchange
-│   ├── transport_wireguard.py    # WireGuardPeerTransport
 │   └── __init__.py
 ├── cli.py                        # Main CLI entry point
 └── __init__.py                   # Package exports
@@ -649,6 +654,11 @@ poetry lock
 #### Install `data_shuttle_bridge` package via `poetry` (including dependencies)
 ```shell
 poetry install
+```
+
+#### Install will the optional dependencies:
+```shell
+poetry install -E flask -E UPnP
 ```
 
 ### Test

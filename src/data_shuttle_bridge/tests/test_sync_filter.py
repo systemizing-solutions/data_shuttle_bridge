@@ -378,6 +378,171 @@ class TestLikeMatch:
         assert RowFilterEvaluator._like_match("HELLO", "hello%") is True
 
 
+class TestRowFilterEvaluatorCrossTableReference:
+    """Tests for cross-table reference lookups in evaluate_condition."""
+
+    def setup_method(self):
+        self.evaluator = RowFilterEvaluator()
+
+    def test_reference_lookup_used_when_provided(self):
+        """Cover lines 170-172: reference_table + reference_key + reference_lookup."""
+        cond = FilterCondition(
+            field="region_id",
+            operator=FilterOperator.EQ,
+            value="ignored_since_lookup_overrides",
+            reference_table="regions",
+            reference_key="region_code",
+        )
+
+        def mock_lookup(table, field_value, key):
+            assert table == "regions"
+            assert key == "region_code"
+            return "US"
+
+        assert (
+            self.evaluator.evaluate_condition(
+                cond, {"region_id": "US"}, reference_lookup=mock_lookup
+            )
+            is True
+        )
+        assert (
+            self.evaluator.evaluate_condition(
+                cond, {"region_id": "EU"}, reference_lookup=mock_lookup
+            )
+            is False
+        )
+
+    def test_unknown_operator_raises(self):
+        """Cover line 179: unknown operator raises FilterEvaluationError."""
+        cond = FilterCondition(field="x", operator=FilterOperator.EQ, value=1)
+        evaluator = RowFilterEvaluator()
+        # Manually remove the operator to simulate unknown
+        evaluator._operator_functions.pop(FilterOperator.EQ)
+        with pytest.raises(FilterEvaluationError, match="Unknown operator"):
+            evaluator.evaluate_condition(cond, {"x": 1})
+
+    def test_generic_exception_wrapped(self):
+        """Cover lines 188-191: generic exception wrapped as FilterEvaluationError."""
+        cond = FilterCondition(
+            field="x", operator=FilterOperator.LT, value="not_a_number"
+        )
+        with pytest.raises(FilterEvaluationError, match="Error evaluating condition"):
+            self.evaluator.evaluate_condition(cond, {"x": None})
+
+    def test_filter_evaluation_error_reraise_in_expression(self):
+        """Cover lines 224-225: FilterEvaluationError re-raised from evaluate_expression."""
+        evaluator = RowFilterEvaluator()
+        # Remove operator to trigger FilterEvaluationError
+        evaluator._operator_functions.pop(FilterOperator.EQ)
+        cond = FilterCondition(field="x", operator=FilterOperator.EQ, value=1)
+        expr = FilterExpression(conditions=[cond], logic="AND")
+        with pytest.raises(FilterEvaluationError, match="Unknown operator"):
+            evaluator.evaluate_expression(expr, {"x": 1})
+
+
+class TestRowFilterEvaluatorSqlWhereExtended:
+    """Additional tests for SQL WHERE false-branch paths."""
+
+    def setup_method(self):
+        self.evaluator = RowFilterEvaluator()
+
+    def test_unquoted_literal_value(self):
+        """Cover line 303: unquoted literal compare_value."""
+        assert (
+            self.evaluator.evaluate_sql_where(
+                {"status": "active"}, "status = active", []
+            )
+            is True
+        )
+        assert (
+            self.evaluator.evaluate_sql_where(
+                {"status": "inactive"}, "status = active", []
+            )
+            is False
+        )
+
+    def test_lt_false_branch(self):
+        """Cover line 315: field_value < compare_value is False."""
+        assert self.evaluator.evaluate_sql_where({"age": 20}, "age < ?", [10]) is False
+
+    def test_lte_false_branch(self):
+        """Cover line 318: field_value <= compare_value is False."""
+        assert self.evaluator.evaluate_sql_where({"age": 20}, "age <= ?", [10]) is False
+
+    def test_gt_false_branch(self):
+        """Cover line 321: field_value > compare_value is False."""
+        assert self.evaluator.evaluate_sql_where({"age": 5}, "age > ?", [10]) is False
+
+    def test_gte_false_branch(self):
+        """Cover line 324: field_value >= compare_value is False."""
+        assert self.evaluator.evaluate_sql_where({"age": 5}, "age >= ?", [10]) is False
+
+    def test_in_false_branch(self):
+        """Cover lines 326-327: field_value not in compare_value."""
+        assert (
+            self.evaluator.evaluate_sql_where(
+                {"role": "viewer"}, "role IN ?", [["admin", "editor"]]
+            )
+            is False
+        )
+
+    def test_not_in_false_branch(self):
+        """Cover lines 329-330: field_value in compare_value."""
+        assert (
+            self.evaluator.evaluate_sql_where(
+                {"role": "banned"}, "role NOT IN ?", [["banned", "deleted"]]
+            )
+            is False
+        )
+
+    def test_like_false_branch(self):
+        """Cover line 333: LIKE doesn't match."""
+        assert (
+            self.evaluator.evaluate_sql_where(
+                {"name": "Jane"}, "name LIKE ?", ["John%"]
+            )
+            is False
+        )
+
+    def test_not_like_false_branch(self):
+        """Cover line 336: NOT LIKE matches (so returns False)."""
+        assert (
+            self.evaluator.evaluate_sql_where(
+                {"name": "John Doe"}, "name NOT LIKE ?", ["John%"]
+            )
+            is False
+        )
+
+    def test_double_quoted_literal(self):
+        """Cover double-quoted literal value parsing."""
+        assert (
+            self.evaluator.evaluate_sql_where(
+                {"status": "active"}, 'status = "active"', []
+            )
+            is True
+        )
+
+
+class TestRowFilterEvaluatorDotNotationModelFalse:
+    """Test dot-notation when related_obj is falsy on model."""
+
+    def setup_method(self):
+        self.evaluator = RowFilterEvaluator()
+
+    def test_dot_notation_model_relation_none(self):
+        """Cover line 129: if related_obj: branch false."""
+
+        class FakeModel:
+            owner = None
+
+        cond = FilterCondition(
+            field="owner.company_id", operator=FilterOperator.IS_NULL
+        )
+        assert (
+            self.evaluator.evaluate_condition(cond, {}, row_model=FakeModel()) is True
+        )
+
+
 class TestReferenceTableLookup:
     def test_lookup_returns_none(self):
         lookup = ReferenceTableLookup(session=None)

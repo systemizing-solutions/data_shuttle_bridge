@@ -62,6 +62,19 @@ from data_shuttle_bridge.file_backup.pipeline.chunking import (
     FixedSizeChunker,
 )
 
+# P2P / Tunnel strategies
+from data_shuttle_bridge.p2p.tunnel import (
+    TunnelStrategy,
+    SubprocessTunnelStrategy,
+    TunnelPeerTransport,
+    register_tunnel_strategy,
+    get_tunnel_strategy_class,
+    list_tunnel_strategies,
+)
+from data_shuttle_bridge.p2p.tunnel_wireguard import WireGuardTunnelStrategy
+from data_shuttle_bridge.p2p.tunnel_cloudflared import CloudflaredTunnelStrategy
+from data_shuttle_bridge.p2p.tunnel_ngrok import NgrokTunnelStrategy
+
 
 __all__ = [
     # SQL
@@ -111,6 +124,16 @@ __all__ = [
     "FileEntry",
     "ChunkingStrategy",
     "FixedSizeChunker",
+    # P2P / Tunnel strategies
+    "TunnelStrategy",
+    "SubprocessTunnelStrategy",
+    "TunnelPeerTransport",
+    "register_tunnel_strategy",
+    "get_tunnel_strategy_class",
+    "list_tunnel_strategies",
+    "WireGuardTunnelStrategy",
+    "CloudflaredTunnelStrategy",
+    "NgrokTunnelStrategy",
 ]
 
 __version__ = "0.0.1"
