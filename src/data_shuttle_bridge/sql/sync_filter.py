@@ -20,6 +20,7 @@ from data_shuttle_bridge.sql.sync_config import (
     FilterCondition,
     FilterExpression,
     FilterOperator,
+    SqlFilter,
 )
 
 if TYPE_CHECKING:
@@ -336,6 +337,39 @@ class RowFilterEvaluator:
                     return False
 
         return True
+
+    def evaluate_sql_filter(
+        self,
+        sql_filter: SqlFilter,
+        row_data: Dict[str, Any],
+        row_model: Optional[Any] = None,
+    ) -> bool:
+        """
+        Evaluate a SQL-based filter against row data.
+        
+        Supports raw SQL WHERE clauses and Jinja2-templated WHERE clauses.
+        
+        Args:
+            sql_filter: SqlFilter to evaluate
+            row_data: Dictionary of row column data
+            row_model: Optional SQLModel instance
+            
+        Returns:
+            True if the row matches the filter
+        """
+        try:
+            # Render the WHERE clause (handles Jinja2 templating if needed)
+            where_clause = sql_filter.render_where()
+            
+            if not where_clause:
+                return True
+            
+            # Evaluate the WHERE clause
+            return self.evaluate_sql_where(where_clause, where_params=None)
+        except Exception as e:
+            import sys
+            print(f"WARNING: Error evaluating SQL filter: {e}", file=sys.stderr)
+            return True  # Default to allowing the row on error
 
 
 class ReferenceTableLookup:

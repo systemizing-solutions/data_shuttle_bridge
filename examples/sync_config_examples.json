@@ -276,5 +276,123 @@
                 "enabled": false
             }
         }
+    },
+
+    "example_11_sql_where_filtering": {
+        "scope": "filtered",
+        "enabled": true,
+        "tables": {
+            "orders": {
+                "enabled": true,
+                "sql_filter": {
+                    "where": "status IN ('active', 'processing') AND amount_cents > 5000"
+                }
+            },
+            "users": {
+                "enabled": true,
+                "sql_filter": {
+                    "where": "is_active = 1"
+                }
+            }
+        }
+    },
+
+    "example_12_jinja2_sql_filtering": {
+        "scope": "filtered",
+        "enabled": true,
+        "tables": {
+            "orders": {
+                "enabled": true,
+                "sql_filter": {
+                    "where": "tenant_id = '{{ tenant_id }}' AND status IN ('active', 'processing', 'shipped') AND amount_cents >= {{ min_amount }}",
+                    "params": {
+                        "tenant_id": "ACME-CORP-001",
+                        "statuses": ["active", "processing", "shipped"],
+                        "min_amount": 10000
+                    }
+                }
+            },
+            "users": {
+                "enabled": true,
+                "sql_filter": {
+                    "where": "tenant_id = '{{ tenant_id }}' AND is_active = true",
+                    "params": {
+                        "tenant_id": "ACME-CORP-001"
+                    }
+                }
+            }
+        }
+    },
+
+    "example_13_sql_plus_column_filtering": {
+        "scope": "filtered",
+        "enabled": true,
+        "tables": {
+            "users": {
+                "enabled": true,
+                "sql_filter": {
+                    "where": "is_active = true"
+                },
+                "exclude_columns": ["password_hash", "ssn", "api_token"]
+            },
+            "products": {
+                "enabled": true,
+                "sql_filter": {
+                    "where": "available = 1"
+                },
+                "exclude_columns": ["cost_cents", "supplier_code", "internal_margin"]
+            }
+        }
+    },
+
+    "example_14_multitenant_sql": {
+        "scope": "filtered",
+        "enabled": true,
+        "tables": {
+            "users": {
+                "enabled": true,
+                "sql_filter": {
+                    "where": "tenant_id = '{{ tenant_id }}'",
+                    "params": {
+                        "tenant_id": "TENANT_ID_INJECTED_AT_RUNTIME"
+                    }
+                }
+            },
+            "orders": {
+                "enabled": true,
+                "sql_filter": {
+                    "where": "tenant_id = '{{ tenant_id }}'",
+                    "params": {
+                        "tenant_id": "TENANT_ID_INJECTED_AT_RUNTIME"
+                    }
+                }
+            }
+        }
+    },
+
+    "example_15_time_based_sync": {
+        "scope": "filtered",
+        "enabled": true,
+        "tables": {
+            "activities": {
+                "enabled": true,
+                "sql_filter": {
+                    "where": "created_at >= '{{ cutoff_date }}'",
+                    "params": {
+                        "cutoff_date": "2026-01-13"
+                    }
+                }
+            },
+            "events": {
+                "enabled": true,
+                "sql_filter": {
+                    "where": "event_date BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+                    "params": {
+                        "start_date": "2026-02-12",
+                        "end_date": "2026-05-12"
+                    }
+                }
+            }
+        }
     }
 }

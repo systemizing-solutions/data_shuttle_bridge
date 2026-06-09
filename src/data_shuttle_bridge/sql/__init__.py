@@ -20,6 +20,7 @@ from data_shuttle_bridge.sql.sync_config import (
     FilterExpression,
     FilterCondition,
     FilterOperator,
+    SqlFilter,
 )
 from data_shuttle_bridge.sql.sync_filter import RowFilterEvaluator
 from data_shuttle_bridge.sql.blueprints import sync_blueprint
@@ -61,6 +62,7 @@ __all__ = [
     "FilterExpression",
     "FilterCondition",
     "FilterOperator",
+    "SqlFilter",
     "RowFilterEvaluator",
     "sync_blueprint",
     "InMemoryPeerTransport",

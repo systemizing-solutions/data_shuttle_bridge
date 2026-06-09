@@ -297,5 +297,135 @@ tables:
   sync_state:
     enabled: false
   
-  change_log:
-    enabled: false
+# ============================================================================
+# EXAMPLE 11: SQL WHERE Clause Filtering
+# ============================================================================
+# Use this when you prefer SQL for more complex or performant filtering
+
+scope: filtered
+enabled: true
+
+tables:
+  orders:
+    enabled: true
+    sql_filter:
+      where: "status IN ('active', 'processing') AND amount_cents > 5000"
+  
+  users:
+    enabled: true
+    sql_filter:
+      where: "is_active = 1"
+
+---
+
+# ============================================================================
+# EXAMPLE 12: Jinja2-Templated SQL Filtering
+# ============================================================================
+# Use this for parameterized SQL with runtime values
+
+scope: filtered
+enabled: true
+
+tables:
+  orders:
+    enabled: true
+    sql_filter:
+      where: |
+        tenant_id = '{{ tenant_id }}'
+        AND status IN ('{{ statuses | join("', '") }}')
+        AND amount_cents >= {{ min_amount }}
+      params:
+        tenant_id: ACME-CORP-001
+        statuses:
+          - active
+          - processing
+          - shipped
+        min_amount: 10000
+  
+  users:
+    enabled: true
+    sql_filter:
+      where: "tenant_id = '{{ tenant_id }}' AND is_active = true"
+      params:
+        tenant_id: ACME-CORP-001
+
+---
+
+# ============================================================================
+# EXAMPLE 13: Combined - SQL + Column Filtering
+# ============================================================================
+# Use SQL for row filtering, column exclusion for sensitive data
+
+scope: filtered
+enabled: true
+
+tables:
+  users:
+    enabled: true
+    sql_filter:
+      where: "is_active = true"
+    exclude_columns:
+      - password_hash
+      - ssn
+      - api_token
+  
+  products:
+    enabled: true
+    sql_filter:
+      where: "available = 1"
+    exclude_columns:
+      - cost_cents        # Don't expose costs
+      - supplier_code     # Don't expose supplier info
+      - internal_margin   # Don't expose margin data
+
+---
+
+# ============================================================================
+# EXAMPLE 14: Multi-Tenant with SQL (Clean Approach)
+# ============================================================================
+# Each sync client uses Jinja2 to inject their tenant ID
+
+scope: filtered
+enabled: true
+
+tables:
+  users:
+    enabled: true
+    sql_filter:
+      where: "tenant_id = '{{ tenant_id }}'"
+      params:
+        tenant_id: ${TENANT_ID}  # Inject at runtime
+  
+  orders:
+    enabled: true
+    sql_filter:
+      where: "tenant_id = '{{ tenant_id }}'"
+      params:
+        tenant_id: ${TENANT_ID}
+
+---
+
+# ============================================================================
+# EXAMPLE 15: Time-Based Incremental Sync
+# ============================================================================
+# Only sync recent data to reduce bandwidth
+
+scope: filtered
+enabled: true
+
+tables:
+  activities:
+    enabled: true
+    sql_filter:
+      where: "created_at >= '{{ cutoff_date }}'"
+      params:
+        cutoff_date: "2026-01-13"  # 30 days ago
+  
+  events:
+    enabled: true
+    sql_filter:
+      where: |
+        event_date BETWEEN '{{ start_date }}' AND '{{ end_date }}'
+      params:
+        start_date: "2026-02-12"
+        end_date: "2026-05-12"

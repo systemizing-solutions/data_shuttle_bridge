@@ -89,21 +89,38 @@ class SyncEngine:
             return False
 
         rule = self.sync_config.get_table_rule(table_name)
-        if not rule or not rule.filter:
+        if not rule:
             return True
-
-        try:
-            return self.filter_evaluator.evaluate_expression(
-                rule.filter, row_data, row_obj
-            )
-        except Exception as e:
-            import sys
-
-            print(
-                f"WARNING: Error evaluating filter for {table_name}: {e}",
-                file=sys.stderr,
-            )
-            return True  # Default to allowing the row on filter error
+        
+        # Check FilterExpression if present
+        if rule.filter:
+            try:
+                return self.filter_evaluator.evaluate_expression(
+                    rule.filter, row_data, row_obj
+                )
+            except Exception as e:
+                import sys
+                print(
+                    f"WARNING: Error evaluating FilterExpression for {table_name}: {e}",
+                    file=sys.stderr,
+                )
+                return True  # Default to allowing the row on filter error
+        
+        # Check SqlFilter if present
+        if rule.sql_filter:
+            try:
+                return self.filter_evaluator.evaluate_sql_filter(
+                    rule.sql_filter, row_data, row_obj
+                )
+            except Exception as e:
+                import sys
+                print(
+                    f"WARNING: Error evaluating SqlFilter for {table_name}: {e}",
+                    file=sys.stderr,
+                )
+                return True  # Default to allowing the row on filter error
+        
+        return True
 
     def _get_fields_to_sync(self, table_name: str) -> List[str]:
         """

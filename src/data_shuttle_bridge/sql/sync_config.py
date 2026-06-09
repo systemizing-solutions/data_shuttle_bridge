@@ -5,37 +5,50 @@ This module allows clients to specify granular control over what gets synced:
 - Entire database
 - Specific schemas (if DB supports it)
 - Specific tables
-- Specific tables with row-level filters
+- Specific tables with row-level filters (FilterExpression or SQL WHERE)
+- Specific tables with Jinja2-templated SQL filters
 
 Filters can reference other tables for rule-based sharing.
 
 Example configurations:
     # Sync entire database
     config = SyncConfig(scope="database")
-
-    # Sync specific tables
+    
+    # Sync specific tables with FilterExpression
     config = SyncConfig(
         scope="tables",
         tables={
             "users": TableSyncRule(),
-            "orders": TableSyncRule(),
+            "orders": TableSyncRule(
+                filter=FilterExpression(
+                    conditions=[
+                        FilterCondition(field="status", operator=FilterOperator.IN, 
+                                      value=["active", "pending"])
+                    ]
+                )
+            ),
         }
     )
-
-    # Sync with filters
+    
+    # Sync with SQL WHERE filters
     config = SyncConfig(
         scope="tables",
         tables={
             "orders": TableSyncRule(
-                where="status = ?",
-                where_params=["active"]
+                filter=SqlFilter(where="status IN ('active', 'pending')")
             )
         }
     )
-
-    # Load from file
-    config = SyncConfig.from_file("sync_config.yaml")
-"""
+    
+    # Sync with Jinja2-templated SQL filters
+    config = SyncConfig(
+        scope="tables",
+        tables={
+            "orders": TableSyncRule(
+                filter=SqlFilter(
+                    where="status = '{{ status }}' AND tenant_id = '{{ tenant_id }}'",
+                    params={"status": "active", "tenant_id": "TENANT_001"}
+                )
 
 from __future__ import annotations
 
@@ -163,19 +176,79 @@ class FilterExpression:
 
 
 @dataclass
+class SqlFilter:
+    """
+    SQL WHERE clause based filtering for row-level filtering.
+    
+    Supports both raw SQL and Jinja2-templated SQL for maximum flexibility.
+    
+    Attributes:
+        where: SQL WHERE clause (e.g. "status IN ('active', 'pending')")
+               Can include Jinja2 templates: "status = '{{ status }}'"
+        params: Optional parameters for Jinja2 templating
+        native: If True, assumes WHERE clause uses actual SQL 
+                (evaluated directly against database columns)
+    """
+    where: str
+    params: Optional[Dict[str, Any]] = None
+    native: bool = True
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> SqlFilter:
+        """Create SqlFilter from dictionary."""
+        return cls(
+            where=data["where"],
+            params=data.get("params"),
+            native=data.get("native", True),
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary."""
+        result = {
+            "where": self.where,
+            "native": self.native,
+        }
+        if self.params:
+            result["params"] = self.params
+        return result
+    
+    def render_where(self) -> str:
+        """
+        Render the WHERE clause with Jinja2 parameters.
+        
+        Returns:
+            Rendered WHERE clause (or original if no params)
+        """
+        if not self.params:
+            return self.where
+        
+        try:
+            import jinja2
+            template = jinja2.Template(self.where)
+            return template.render(**self.params)
+        except ImportError:
+            # Jinja2 not installed, return original
+            return self.where
+
+
+@dataclass
 class TableSyncRule:
     """
     Synchronization rule for a specific table.
+    
+    Supports both FilterExpression (programmatic) and SqlFilter (SQL-based).
 
     Attributes:
         enabled: Whether this table should be synced
-        filter: Optional FilterExpression for row-level filtering
+        filter: Optional FilterExpression for programmatic row-level filtering
+        sql_filter: Optional SqlFilter for SQL WHERE clause filtering
         exclude_columns: Columns to exclude from sync
         include_only_columns: If set, only sync these columns
     """
 
     enabled: bool = True
     filter: Optional[FilterExpression] = None
+    sql_filter: Optional[SqlFilter] = None
     exclude_columns: List[str] = field(default_factory=list)
     include_only_columns: Optional[List[str]] = None
 
@@ -185,10 +258,15 @@ class TableSyncRule:
         filter_expr = None
         if "filter" in data:
             filter_expr = FilterExpression.from_dict(data["filter"])
+        
+        sql_filter = None
+        if "sql_filter" in data:
+            sql_filter = SqlFilter.from_dict(data["sql_filter"])
 
         return cls(
             enabled=data.get("enabled", True),
             filter=filter_expr,
+            sql_filter=sql_filter,
             exclude_columns=data.get("exclude_columns", []),
             include_only_columns=data.get("include_only_columns"),
         )
@@ -201,6 +279,8 @@ class TableSyncRule:
         }
         if self.filter:
             result["filter"] = self.filter.to_dict()
+        if self.sql_filter:
+            result["sql_filter"] = self.sql_filter.to_dict()
         if self.include_only_columns:
             result["include_only_columns"] = self.include_only_columns
         return result
