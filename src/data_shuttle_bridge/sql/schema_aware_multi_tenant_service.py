@@ -19,115 +19,26 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Callable, Dict, Iterable, Optional, Type, List, Tuple
 
-from cryptography.fernet import Fernet
 from flask import Flask, Blueprint, request, jsonify, g
 from sqlalchemy import (
-    Column,
-    String,
-    Integer,
-    ForeignKey,
-    JSON,
-    DateTime,
-    event,
     create_engine,
-    MetaData,
     func,
 )
-from sqlalchemy.orm import Session, sessionmaker, relationship
-from sqlmodel import SQLModel, Field, select
+from sqlalchemy.orm import sessionmaker
+from sqlmodel import SQLModel, Field, select, Session
 
+from data_shuttle_bridge.models.tenant import Tenant, TenantSecret
+from data_shuttle_bridge.sql.multi_tenant_service import (
+    SecretManager,
+)
 from data_shuttle_bridge.sql.sync import SyncEngine, ConflictPolicy
 from data_shuttle_bridge.sql.schema import build_schema
 from data_shuttle_bridge.sql.wiring import attach_change_hooks_for_models
 from data_shuttle_bridge.sql.schema_registry import SchemaRegistry
 from data_shuttle_bridge.sql.versioning_models import SchemaSet, SchemaVersion
-from data_shuttle_bridge.sql.jsonschema_types import schema_from_models
 from data_shuttle_bridge.sql.diffing import DefaultDiffEngine, classify_drift
 from data_shuttle_bridge.sql.policy import DefaultDriftPolicy
 from data_shuttle_bridge.sql.view_builder import ConsolidationViewBuilder
-
-
-# ===========================
-# Core Models (Master DB)
-# ===========================
-
-
-class Tenant(SQLModel, table=True):
-    """Represents a tenant in the multi-tenant system."""
-
-    __tablename__ = "mt_tenants"
-
-    id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(unique=True, nullable=False, index=True)
-    slug: str = Field(unique=True, nullable=False, index=True)
-    api_key: str = Field(unique=True, nullable=False)
-
-    # Tenant metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-    # Database connection info
-    database_url: str = Field(nullable=False)
-
-    # Schema version tracking
-    current_schema_version: int = Field(default=1)
-    schema_set_id: int | None = Field(default=None, nullable=True)
-
-    # Configuration
-    is_active: bool = Field(default=True, nullable=False)
-    metadata_json: dict | None = Field(default=None, sa_column=Column(JSON))
-
-    secrets: list[TenantSecret] = relationship(
-        "TenantSecret",
-        back_populates="tenant",
-        cascade="all, delete-orphan",
-    )
-
-
-class TenantSecret(SQLModel, table=True):
-    """Encrypted secrets storage for tenants."""
-
-    __tablename__ = "mt_tenant_secrets"
-
-    id: int | None = Field(default=None, primary_key=True)
-    tenant_id: int = Field(foreign_key="mt_tenants.id", nullable=False, index=True)
-
-    key: str = Field(nullable=False, index=True)
-    secret: str = Field(nullable=False)  # Encrypted
-
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-    tenant: Tenant = relationship("Tenant", back_populates="secrets")
-
-
-# ===========================
-# Encryption & Secrets
-# ===========================
-
-
-class SecretManager:
-    """Manages encryption/decryption of tenant secrets."""
-
-    def __init__(self, fernet_key: bytes | None = None):
-        if fernet_key is None:
-            fernet_key = os.environ.get("FERNET_KEY")
-            if fernet_key:
-                fernet_key = (
-                    fernet_key.encode() if isinstance(fernet_key, str) else fernet_key
-                )
-            else:
-                fernet_key = Fernet.generate_key()
-
-        self.cipher = Fernet(fernet_key)
-
-    def encrypt(self, secret: str) -> str:
-        """Encrypt a secret string."""
-        return self.cipher.encrypt(secret.encode()).decode()
-
-    def decrypt(self, encrypted_secret: str) -> str:
-        """Decrypt a secret string."""
-        return self.cipher.decrypt(encrypted_secret.encode()).decode()
 
 
 # ===========================
@@ -228,7 +139,7 @@ class SchemAwareTenantManager:
             self._tenant_engines[tenant.id] = engine
 
             # Create schema set in tenant registry
-            registry_session = sessionmaker(bind=engine)()
+            registry_session = sessionmaker(bind=engine, class_=Session)()
             try:
                 schema_set = registry.create_schema_set(
                     session=registry_session,
@@ -307,7 +218,9 @@ class SchemAwareTenantManager:
         if tenant.id not in self._session_factories:
             engine = create_engine(tenant.database_url)
             SQLModel.metadata.create_all(engine)
-            self._session_factories[tenant.id] = sessionmaker(bind=engine)
+            self._session_factories[tenant.id] = sessionmaker(
+                bind=engine, class_=Session
+            )
 
         return self._session_factories[tenant.id]
 
@@ -335,7 +248,9 @@ class SchemAwareTenantManager:
         new_schema = self._build_models_schema(new_models)
 
         registry = self.get_schema_registry_for_tenant(tenant)
-        registry_session = sessionmaker(bind=self._tenant_engines[tenant.id])()
+        registry_session = sessionmaker(
+            bind=self._tenant_engines[tenant.id], class_=Session
+        )()
 
         try:
             # Get current version
@@ -389,7 +304,9 @@ class SchemAwareTenantManager:
         sess = session_factory()
 
         # Get all schema versions
-        registry_session = sessionmaker(bind=self._tenant_engines[tenant.id])()
+        registry_session = sessionmaker(
+            bind=self._tenant_engines[tenant.id], class_=Session
+        )()
         try:
             versions = registry.list_schema_versions(registry_session, "models")
         finally:
@@ -430,8 +347,6 @@ class SchemAwareTenantManager:
 
     def set_secret(self, tenant: Tenant, key: str, secret: str) -> None:
         """Set a secret for a tenant."""
-        from data_shuttle_bridge.sql.versioning_models import TenantSecret
-
         encrypted = self.secret_manager.encrypt(secret)
 
         with self.master_session_factory() as sess:
@@ -542,7 +457,7 @@ def create_schema_aware_multi_tenant_app(
     # Initialize master database
     master_engine = create_engine(master_db_url)
     SQLModel.metadata.create_all(master_engine)
-    MasterSessionLocal = sessionmaker(bind=master_engine)
+    MasterSessionLocal = sessionmaker(bind=master_engine, class_=Session)
 
     # Initialize secret manager
     secret_manager = SecretManager(fernet_key)
@@ -749,7 +664,7 @@ def create_schema_aware_multi_tenant_app(
         try:
             registry = tenant_mgr.get_schema_registry_for_tenant(tenant)
             registry_session = sessionmaker(
-                bind=tenant_mgr._tenant_engines[tenant.id]
+                bind=tenant_mgr._tenant_engines[tenant.id], class_=Session
             )()
 
             versions = registry.list_schema_versions(registry_session, "models")
@@ -832,7 +747,7 @@ def create_schema_aware_multi_tenant_app(
             payload = request.get_json(force=True) or {}
             changes = payload.get("changes", [])
             sync_engine.apply_remote_changes(changes)
-            sync_engine.session.commit()
+            sync_engine.sess.commit()
 
             return jsonify({"ok": True, "schema_metadata": metadata})
         except Exception as e:
@@ -906,7 +821,7 @@ def create_schema_aware_multi_tenant_app(
 
             # Get consolidated sync engine
             sync_engine, metadata = tenant_mgr.get_consolidated_sync_engine(tenant)
-            sess = sync_engine.session
+            sess = sync_engine.sess
 
             # Find the model class
             model_class = None

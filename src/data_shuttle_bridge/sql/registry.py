@@ -6,30 +6,7 @@ from sqlmodel import SQLModel, Field, Session, select, Column as SQLModelColumn
 
 from sqlalchemy import Integer, String, UniqueConstraint
 
-MAX_NODE = (1 << 10) - 1
-
-
-class NodeRegistry(SQLModel, table=True):
-    __tablename__ = "node_registry"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    device_key: str = Field(
-        sa_column=SQLModelColumn(
-            String(64),
-            nullable=False,
-            index=True,
-        )
-    )
-    node_id: int = Field(
-        sa_column=SQLModelColumn(
-            Integer,
-            nullable=False,
-        )
-    )
-
-    __table_args__ = (
-        UniqueConstraint("device_key", name="uq_node_registry_device_key"),
-        UniqueConstraint("node_id", name="uq_node_registry_node_id"),
-    )
+from data_shuttle_bridge.models.registry import NodeRegistry, MAX_NODE
 
 
 def allocate_node_id(sess: Session, device_key: str) -> int:
@@ -38,7 +15,7 @@ def allocate_node_id(sess: Session, device_key: str) -> int:
     ).first()
     if existing:
         return existing.node_id
-    used = set(x.node_id for x in sess.exec(select(NodeRegistry.node_id)).all())
+    used = set(sess.exec(select(NodeRegistry.node_id)).all())
     for candidate in range(1, MAX_NODE + 1):
         if candidate not in used:
             entry = NodeRegistry(device_key=device_key, node_id=candidate)

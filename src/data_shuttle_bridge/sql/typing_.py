@@ -1,13 +1,5 @@
-from typing import TypedDict, Literal, Dict, Any
+"""Re-exports from data_shuttle_bridge.models.typing_ for backward compatibility."""
 
-Op = Literal["I", "U", "D"]
+from data_shuttle_bridge.models.typing_ import ChangePayload, Op
 
-
-class ChangePayload(TypedDict):
-    id: int
-    table: str
-    pk: int
-    op: Op
-    version: int
-    data: Dict[str, Any] | None
-    at: str | None
+__all__ = ["ChangePayload", "Op"]

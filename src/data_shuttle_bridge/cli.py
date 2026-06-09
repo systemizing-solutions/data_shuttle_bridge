@@ -9,6 +9,7 @@ from sqlmodel import Session
 
 from data_shuttle_bridge.sql.nodeid import ClientNodeManager
 from data_shuttle_bridge.file_backup.cli import add_backup_commands
+from data_shuttle_bridge.p2p.cli import add_p2p_commands
 from data_shuttle_bridge.sql.versioning_models import (
     SchemaSet,
     SchemaVersion,
@@ -267,6 +268,9 @@ def main(argv=None):
 
     # Backup commands
     add_backup_commands(sub)
+
+    # P2P WireGuard commands
+    add_p2p_commands(sub)
 
     # Schema commands
     p_schema = sub.add_parser("schema", help="Schema versioning commands")

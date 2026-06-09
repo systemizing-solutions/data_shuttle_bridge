@@ -9,8 +9,6 @@ Provides:
 - Flask integration with multi-tenant sync blueprints
 """
 
-from __future__ import annotations
-
 import os
 import secrets
 from contextlib import contextmanager
@@ -30,62 +28,13 @@ from sqlalchemy import (
     event,
     create_engine,
 )
-from sqlalchemy.orm import Session, sessionmaker, relationship
-from sqlmodel import SQLModel, Field, select
+from sqlalchemy.orm import sessionmaker, relationship
+from sqlmodel import SQLModel, Field, select, Relationship, Session
 
 from data_shuttle_bridge.sql.sync import SyncEngine, ConflictPolicy
 from data_shuttle_bridge.sql.schema import build_schema
 from data_shuttle_bridge.sql.wiring import attach_change_hooks_for_models
-
-
-# ===========================
-# Core Models
-# ===========================
-
-
-class Tenant(SQLModel, table=True):
-    """Represents a tenant in the multi-tenant system."""
-
-    __tablename__ = "mt_tenants"
-
-    id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(unique=True, nullable=False, index=True)
-    slug: str = Field(unique=True, nullable=False, index=True)
-    api_key: str = Field(unique=True, nullable=False)
-
-    # Tenant metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-    # Database connection info
-    database_url: str = Field(nullable=False)  # SQLite file path or connection string
-
-    # Configuration
-    is_active: bool = Field(default=True, nullable=False)
-    metadata_json: dict | None = Field(default=None, sa_column=Column(JSON))
-
-    secrets: list[TenantSecret] = relationship(
-        "TenantSecret",
-        back_populates="tenant",
-        cascade="all, delete-orphan",
-    )
-
-
-class TenantSecret(SQLModel, table=True):
-    """Encrypted secrets storage for tenants."""
-
-    __tablename__ = "mt_tenant_secrets"
-
-    id: int | None = Field(default=None, primary_key=True)
-    tenant_id: int = Field(foreign_key="mt_tenants.id", nullable=False, index=True)
-
-    key: str = Field(nullable=False, index=True)
-    secret: str = Field(nullable=False)  # Encrypted
-
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-    tenant: Tenant = relationship("Tenant", back_populates="secrets")
+from data_shuttle_bridge.models.tenant import Tenant, TenantSecret
 
 
 # ===========================
@@ -271,7 +220,7 @@ class TenantManager:
         """
         if tenant.slug not in self._session_factories:
             engine = self._get_engine_for_tenant(tenant)
-            SessionLocal = sessionmaker(bind=engine)
+            SessionLocal = sessionmaker(bind=engine, class_=Session)
             self._session_factories[tenant.slug] = SessionLocal
 
         return self._session_factories[tenant.slug]
@@ -413,7 +362,7 @@ def create_multi_tenant_app(
     # Initialize master database
     master_engine = create_engine(master_db_url)
     SQLModel.metadata.create_all(master_engine)
-    MasterSessionLocal = sessionmaker(bind=master_engine)
+    MasterSessionLocal = sessionmaker(bind=master_engine, class_=Session)
 
     # Initialize secret manager
     secret_manager = SecretManager(fernet_key)

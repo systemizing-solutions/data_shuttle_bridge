@@ -2,9 +2,9 @@
 
 import json
 from typing import Any, Dict, List, Optional, Tuple
-from sqlalchemy import MetaData, Table, insert, select
+from sqlalchemy import MetaData, Table, insert
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
+from sqlmodel import Session, select
 from jsonschema import Draft202012Validator, ValidationError
 
 from data_shuttle_bridge.sql.versioning_models import (

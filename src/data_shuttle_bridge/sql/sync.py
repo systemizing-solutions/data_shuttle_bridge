@@ -6,17 +6,15 @@ from typing import Dict, List, Iterable, Tuple, Set, Optional, Any
 
 from sqlmodel import Session, select
 
-from data_shuttle_bridge.sql.changelog import ChangeLog, SyncState
-from data_shuttle_bridge.sql.payloads import TableSchema, apply_row, serialize_row
-from data_shuttle_bridge.sql.typing_ import ChangePayload
+from data_shuttle_bridge.models.enums import ConflictPolicy
+from data_shuttle_bridge.models.changelog import ChangeLog, SyncState
+from data_shuttle_bridge.models.payloads import TableSchema
+from data_shuttle_bridge.models.typing_ import ChangePayload
+from data_shuttle_bridge.models.sync_config import SyncConfig
+from data_shuttle_bridge.models.enums import SyncScope
+from data_shuttle_bridge.sql.payloads import apply_row, serialize_row
 from data_shuttle_bridge.sql.wiring import set_current_node_id, get_current_node_id
-from data_shuttle_bridge.sql.sync_config import SyncConfig, SyncScope
 from data_shuttle_bridge.sql.sync_filter import RowFilterEvaluator
-
-
-class ConflictPolicy(str, Enum):
-    LWW = "last_write_wins"
-    VERSION = "version_strict"
 
 
 class SyncEngine:
@@ -293,6 +291,9 @@ class SyncEngine:
             return
         if cp["data"]:
             apply_row(obj, cp["data"])
+        # Flush first so before_update hook fires for data changes,
+        # then set the authoritative remote version afterward.
+        self.sess.flush()
         setattr(obj, "version", max(current_version, incoming_version))
 
     def apply_remote_changes(self, changes: Iterable[ChangePayload]):

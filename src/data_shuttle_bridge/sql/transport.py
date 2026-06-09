@@ -7,7 +7,7 @@ from data_shuttle_bridge.sql.typing_ import ChangePayload
 
 class PeerTransport:
     def get_changes_since(
-        self, since_id: int, limit: int = 1000
+        self, since_id: int, limit: int = 1000, exclude_node_id: str | None = None
     ) -> List[ChangePayload]:
         raise NotImplementedError
 
@@ -23,7 +23,7 @@ class InMemoryPeerTransport(PeerTransport):
         self._changes = changes or []
 
     def get_changes_since(
-        self, since_id: int, limit: int = 1000
+        self, since_id: int, limit: int = 1000, exclude_node_id: str | None = None
     ) -> list[ChangePayload]:
         return [c for c in self._changes if c["id"] > since_id][:limit]
 

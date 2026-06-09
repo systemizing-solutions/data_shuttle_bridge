@@ -8,6 +8,9 @@ from sqlalchemy import event
 
 from data_shuttle_bridge.sql.changelog import ChangeLog
 
+# Track models that already have hooks attached to prevent duplicate registration
+_hooked_models: set = set()
+
 # Thread-local storage for current node_id during sync operations
 _current_node_id: threading.local = threading.local()
 
@@ -49,6 +52,10 @@ def _log(connection, table: str, pk: int, op: str, version: int, summary):
 
 
 def attach_change_hooks(model: Type, table_name: str):
+    if id(model) in _hooked_models:
+        return
+    _hooked_models.add(id(model))
+
     @event.listens_for(model, "before_update", propagate=True)
     def _bump_version(mapper, connection, target):
         # Check if any actual data changed (not just updated_at)
