@@ -9,6 +9,8 @@ from data_shuttle_bridge.models.sync_config import (
     SyncConfig,
 )
 
+SqlFilter = SyncConfig
+
 __all__ = [
     "SyncScope",
     "FilterOperator",
@@ -17,4 +19,5 @@ __all__ = [
     "TableSyncRule",
     "SchemaSyncConfig",
     "SyncConfig",
+    "SqlFilter",
 ]
